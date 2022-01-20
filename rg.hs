@@ -30,6 +30,11 @@ randomNode state =
     let index = mod randomValue $ length circuitAtoms in
     (circuitAtoms !! index, newState)
 
+randomNodes :: StdGen -> Int -> [Circuit]
+randomNodes state size
+    | size > 0 = let (symbol, newState) = randomNode state in [symbol] ++ (randomNodes newState $ size - 1)
+    | otherwise = []
+
 cross :: StdGen -> Gene -> Gene -> Gene
 cross state (ah:at) (bh:bt) =
     let (randomValue, newState) = next state in
@@ -44,14 +49,15 @@ cross state [] [] = []
 -- TODO JSON to Graph
 
 -- TODO: Graph to Graphviz Dot lang
-drawEdge :: Gene -> String
-drawEdge ((str, fin):t) = "    " ++ show str ++ " -> " ++ show fin ++ "\n" ++ drawEdge t 
-drawEdge [] = "" 
+drawEdge :: [Circuit] -> Gene -> String
+drawEdge nodes ((str, fin):t) = "    " ++ (show $ nodes !! str) ++ show str ++ " -> " ++ (show $ nodes !! fin) ++ show fin ++ "\n" ++ drawEdge nodes t 
+drawEdge nodes [] = "" 
 
-draw :: Gene -> String
-draw x = "digraph g {\n" ++ drawEdge x ++ "}"
+draw :: [Circuit] -> Gene -> String
+draw nodes x = "digraph g {\n" ++ drawEdge nodes x ++ "}"
 
 main = do
-    putStrLn $ draw $ randomGene 10 0
+    putStrLn $ draw (randomNodes (mkStdGen 0) 10)$ randomGene 10 0
+    putStrLn $ draw (randomNodes (mkStdGen 0) 10)$ randomGene 10 5 
     --putStrLn $ draw $ randomGene 10 5
     --putStrLn $ draw $ cross (mkStdGen 0) (randomGene 10 0) $ randomGene 10 5
