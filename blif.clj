@@ -118,3 +118,30 @@
 ;;(defn genetic-to-blif [nodes edges])
 ;; when converting from genetic representation to blif
 ;; each edge is represented by a variable (note importance of which argument it is)
+
+(defn edge-to-var [edge]
+  {:pre (< (count edge) 3)
+   :post (string? %)}
+  (format "$%s" (str/replace (str/replace (pr-str edge) #"\s" "_") #"\(|\)" "")))
+
+(print (edge-to-var '(1 2)))
+
+(defn generate-input [node index edges]
+  (format ".inputs %s" (edge-to-var (first (filter (fn [x] (.contains x index)) edges)))))
+(defn generate-output [node index edges]
+  (format ".outputs %s" (edge-to-var (first (filter (fn [x] (.contains x index)) edges)))))
+(defn generate-latch [node index edges] (format ".latch %s %s" (get node :trigger-type) (get node :initial)))
+(defn generate-constant [node index edges] ".names")
+(defn generate-names [node index edges] (format ".names \n %s" (get node :table)))
+(defn generate [node index edges]
+  (case (get node :type)
+    :input (generate-input node index edges)
+    :output (generate-output node index edges)
+    :latch (generate-latch node index edges)
+    :constant (generate-constant node index edges)
+    :names (generate-names node index edges)
+    (throw "Unrecognised Node Type encountered during BLIF generation.")
+))
+
+(print (let [[nodes edges] (genetic-representation "example.blif")]
+       (map-indexed (fn [index node] (generate node index edges)) nodes)))
