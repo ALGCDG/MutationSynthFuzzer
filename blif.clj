@@ -1,8 +1,9 @@
 (require '[clojure.string :as str])
 (require '[clojure.set :as set])
+(require '[clojure.pprint :as pp])
 
 (defmacro LINEEND [] #"\n")
-(defmacro KEYWORD [] #"(?=(\.names|\.subckt|\.inputs|\.outputs|\.latch))")
+(defmacro KEYWORD [] #"(?=(\.names|\.subckt|\.inputs|\.outputs|\.latch|\.end))")
 
 (defmacro unique-id [] "0")
 ;; modules
@@ -17,7 +18,7 @@
 (defn blocks [s] (filter (fn [x] (re-find (KEYWORD) x)) (str/split s (KEYWORD))))
 
 (defn manage-input-node [name] {:type :input})
-(defn manage-input-port [name] {:output name})
+(defn manage-input-port [name] {name :output})
 (defn manage-inputs [block [nodes edges]]
   (let [args (rest (str/split block #" "))]
     (let [new-nodes (map manage-input-node args)]
@@ -25,7 +26,7 @@
         [(into [] (concat nodes new-nodes)) (into [] (concat edges new-ports))]))))
 
 (defn manage-output-node [name] {:type :output})
-(defn manage-output-port [name] {:input name})
+(defn manage-output-port [name] {name :input})
 (defn manage-outputs [block [nodes edges]]
   (let [args (rest (str/split block #" "))]
     (let [new-nodes (map manage-output-node args)]
@@ -35,18 +36,18 @@
 (defn manage-names [block [nodes edges]]
   (let [lines (str/split block (LINEEND))]
     (let [table-rows (rest lines)]
-      (case table-rows
-        [] [(conj nodes {:type :constant :value :false}) edges]
-        ["1"] [(conj nodes {:type :constant :value :true}) edges]
-        (let [args (rest (str/split (first lines) #" "))]
-          (let [output (last args)]
+      (let [args (rest (str/split (first lines) #" "))]
+        (let [output (last args)]
+          (case table-rows
+            [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
+            ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
             (let [inputs (butlast args)]
-              [(conj nodes {:type :names :table table-rows}) (conj edges {:inputs inputs :output output})])))))))
+              [(conj nodes {:type :names :table table-rows}) (conj edges {inputs :inputs output :output})])))))))
 
 (defn manage-latch [block [nodes edges]]
   (let [args (rest (str/split block #" "))]
     (let [[input output type clock initial] args]
-      [(conj nodes {:type :latch :trigger-type type :initial initial}) (conj edges {:input input :output output :clk clock})])))
+      [(conj nodes {:type :latch :trigger-type type :initial initial}) (conj edges {input :input output :output clock :clk})])))
 
 (defn manage-subckt [block [nodes edges]]
   (let [args (drop 1 (str/split block #" "))]
@@ -64,6 +65,7 @@
       ".names" (manage-names block [nodes edges])
       ".subckt" (manage-subckt block [nodes edges])
       ".latch" (manage-latch block [nodes edges])
+      [nodes edges]
       )))
 
 (defn parse' [blocks [nodes edges]]
@@ -94,26 +96,27 @@
 
 ;;(print (let [[nodes ports] (parse (slurp "i.cl.blif"))] (let [vars (map vals ports)] (reduce concat vars))))
 (defn get-vars [ports]
-  (let [vars (map vals ports)] (reduce concat vars)))
+  (let [vars (map keys ports)] (reduce concat vars)))
 ;; to find edge genes, iterate through variables, find edges where they connect
 
 ;; discover-source - finds nodes which have a port which uses this variable
 ;; discover-sink - finds nodes which have a port which uses this variable
 (defn discover-edge [var ports]
   {:post [(< (count %) 3)]}  ;; Post condition that lenght of result is two or fewer
-  (filter identity (map-indexed (fn [index port] (if (.contains (vals port) var) index nil)) ports)))
+  (filter identity (map-indexed (fn [index port] (if (.contains (keys port) var) {index (get port var)} nil)) ports)))
 
-(print (let [[nodes ports] (parse (slurp "example.blif"))] (discover-edge "clk" ports)))
+;;(print (let [[nodes ports] (parse (slurp "example.blif"))] (discover-edge "clk" ports)))
 
 (defn ports-to-edges [ports]
   (map (fn [x] (discover-edge x ports)) (get-vars ports)))
 
 (defn genetic-representation [f]
   (let [[nodes ports] (parse (slurp f))]
-    (let [edges (ports-to-edges ports)]
+    (let [edges (distinct (ports-to-edges ports))]
       [nodes edges])))
 
-(print (genetic-representation "example.blif"))
+(pp/pprint (genetic-representation "example.blif"))
+;;(print (let [[n e] (genetic-representation "example.blif")] e))
 
 ;;(defn genetic-to-blif [nodes edges])
 ;; when converting from genetic representation to blif
@@ -122,15 +125,30 @@
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
-  (format "$%s" (str/replace (str/replace (pr-str edge) #"\s" "_") #"\(|\)" "")))
+  (format "$%s" (str/replace (str/replace (pr-str (flatten (map keys edge))) #"\s" "_") #"\(|\)" "")))
 
-(print (edge-to-var '(1 2)))
+;;(print (edge-to-var '(1 2)))
+
+(defn create-var [index port edges]
+  (let [edge (filter (fn [x] (and (.contains (flatten (map keys x)) index) (.contains (flatten (map vals x)) port))) edges)]
+    ;;(assert (= (count edge) 1))
+    ;;(print (format "  Test %s  " (pr-str edge)))
+    (edge-to-var (first edge))))
 
 (defn generate-input [node index edges]
-  (format ".inputs %s" (edge-to-var (first (filter (fn [x] (.contains x index)) edges)))))
+  (format ".inputs %s" (create-var index :output edges)))
+
 (defn generate-output [node index edges]
-  (format ".outputs %s" (edge-to-var (first (filter (fn [x] (.contains x index)) edges)))))
-(defn generate-latch [node index edges] (format ".latch %s %s" (get node :trigger-type) (get node :initial)))
+  (format ".outputs %s" (create-var index :input edges)))
+
+(defn generate-latch [node index edges]
+  (let [input (create-var index :input edges)
+        output (create-var index :output edges)
+        clk (create-var index :clk edges)
+        trigger (get node :trigger-type)
+        initial (get node :initial)]
+    (format ".latch %s %s %s %s %s" input output trigger clk initial)))
+
 (defn generate-constant [node index edges] ".names")
 (defn generate-names [node index edges] (format ".names \n %s" (get node :table)))
 (defn generate [node index edges]
@@ -143,5 +161,7 @@
     (throw "Unrecognised Node Type encountered during BLIF generation.")
 ))
 
-(print (let [[nodes edges] (genetic-representation "example.blif")]
+(print "\n--------\n")
+
+(pp/pprint (let [[nodes edges] (genetic-representation "example.blif")]
        (map-indexed (fn [index node] (generate node index edges)) nodes)))
