@@ -20,7 +20,7 @@
 (defn manage-input-node [name] {:type :input})
 (defn manage-input-port [name] {name :output})
 (defn manage-inputs [block [nodes edges]]
-  (let [args (rest (str/split block #" "))]
+  (let [args (rest (str/split block #" |\n"))]
     (let [new-nodes (map manage-input-node args)]
       (let [new-ports (map manage-input-port args)]
         [(into [] (concat nodes new-nodes)) (into [] (concat edges new-ports))]))))
@@ -28,10 +28,12 @@
 (defn manage-output-node [name] {:type :output})
 (defn manage-output-port [name] {name :input})
 (defn manage-outputs [block [nodes edges]]
-  (let [args (rest (str/split block #" "))]
+  (let [args (rest (str/split block #" |\n"))]
     (let [new-nodes (map manage-output-node args)]
       (let [new-ports (map manage-output-port args)]
         [(into [] (concat nodes new-nodes)) (into [] (concat edges new-ports))]))))
+
+(defn input-keyword [index] (keyword (format "input%d" index)))
 
 (defn manage-names [block [nodes edges]]
   (let [lines (str/split block (LINEEND))]
@@ -42,10 +44,11 @@
             [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
             ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
             (let [inputs (butlast args)]
-              [(conj nodes {:type :names :table table-rows}) (conj edges {inputs :inputs output :output})])))))))
+              (let [input-map (apply merge (map-indexed (fn [index variable] {variable (input-keyword index)}) inputs))]
+                [(conj nodes {:type :names :num-inputs (count inputs) :table table-rows}) (conj edges (merge input-map {output :output}))]))))))))
 
 (defn manage-latch [block [nodes edges]]
-  (let [args (rest (str/split block #" "))]
+  (let [args (rest (str/split block #" |\n"))]
     (let [[input output type clock initial] args]
       [(conj nodes {:type :latch :trigger-type type :initial initial}) (conj edges {input :input output :output clock :clk})])))
 
@@ -102,7 +105,7 @@
 ;; discover-source - finds nodes which have a port which uses this variable
 ;; discover-sink - finds nodes which have a port which uses this variable
 (defn discover-edge [var ports]
-  {:post [(< (count %) 3)]}  ;; Post condition that lenght of result is two or fewer
+  {:post [(filter (= 1 (count (filter (fn [x] (= x :output)) (apply merge %)))))]}  ;; Post condition that any edge has only one output
   (filter identity (map-indexed (fn [index port] (if (.contains (keys port) var) {index (get port var)} nil)) ports)))
 
 ;;(print (let [[nodes ports] (parse (slurp "example.blif"))] (discover-edge "clk" ports)))
@@ -114,6 +117,10 @@
   (let [[nodes ports] (parse (slurp f))]
     (let [edges (distinct (ports-to-edges ports))]
       [nodes edges])))
+
+(pp/pprint (parse (slurp "example.blif")))
+
+(print "\n--------\n")
 
 (pp/pprint (genetic-representation "example.blif"))
 ;;(print (let [[n e] (genetic-representation "example.blif")] e))
@@ -130,10 +137,15 @@
 ;;(print (edge-to-var '(1 2)))
 
 (defn create-var [index port edges]
-  (let [edge (filter (fn [x] (and (.contains (flatten (map keys x)) index) (.contains (flatten (map vals x)) port))) edges)]
-    ;;(assert (= (count edge) 1))
-    ;;(print (format "  Test %s  " (pr-str edge)))
-    (edge-to-var (first edge))))
+  (let [check
+        (fn [edge]
+          (and
+           (.contains (flatten (map keys edge)) index)
+           (= (get (apply merge edge) index) port)))]
+    (let [edge (filter check edges)]
+      ;;(assert (= (count edge) 1))
+      ;;(print (format "  Test %s  " (pr-str edge)))
+      (edge-to-var (first edge)))))
 
 (defn generate-input [node index edges]
   (format ".inputs %s" (create-var index :output edges)))
@@ -149,8 +161,19 @@
         initial (get node :initial)]
     (format ".latch %s %s %s %s %s" input output trigger clk initial)))
 
-(defn generate-constant [node index edges] ".names")
-(defn generate-names [node index edges] (format ".names \n %s" (get node :table)))
+(defn generate-constant [node index edges]
+  (format ".names %s" (create-var index :output edges)))
+
+(defn generate-names [node index edges]
+  (let [input-labels (map input-keyword (range (get node :num-inputs)))]
+    (print input-labels)
+    (let [args (pr-str (map (fn [k] (create-var index k edges)) input-labels))]
+      (print args)
+      (print index)
+      (let [output (create-var index :output edges)]
+        (print output)
+  (format ".names %s %s \n %s" args (create-var index :output edges) (get node :table))))))
+
 (defn generate [node index edges]
   (case (get node :type)
     :input (generate-input node index edges)
