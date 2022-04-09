@@ -2,7 +2,7 @@
 (require '[clojure.set :as set])
 (require '[clojure.pprint :as pp])
 
-(defmacro LINEEND [] #"\n")
+(defmacro LINEEND [] #"\n+")
 (defmacro KEYWORD [] #"(?=(\.names|\.subckt|\.inputs|\.outputs|\.latch|\.end))")
 
 (defmacro unique-id [] "0")
@@ -20,7 +20,7 @@
 (defn manage-input-node [name] {:type :input})
 (defn manage-input-port [name] {name :output})
 (defn manage-inputs [block [nodes edges]]
-  (let [args (rest (str/split block #" |\n"))]
+  (let [args (rest (str/split (str/trim block) #"(\s|\n)+"))]
     (let [new-nodes (map manage-input-node args)]
       (let [new-ports (map manage-input-port args)]
         [(into [] (concat nodes new-nodes)) (into [] (concat edges new-ports))]))))
@@ -28,7 +28,7 @@
 (defn manage-output-node [name] {:type :output})
 (defn manage-output-port [name] {name :input})
 (defn manage-outputs [block [nodes edges]]
-  (let [args (rest (str/split block #" |\n"))]
+  (let [args (rest (str/split (str/trim block) #"(\s|\n)+"))]
     (let [new-nodes (map manage-output-node args)]
       (let [new-ports (map manage-output-port args)]
         [(into [] (concat nodes new-nodes)) (into [] (concat edges new-ports))]))))
@@ -38,7 +38,7 @@
 (defn manage-names [block [nodes edges]]
   (let [lines (str/split block (LINEEND))]
     (let [table-rows (rest lines)]
-      (let [args (rest (str/split (first lines) #" "))]
+      (let [args (rest (str/split (str/trim (first lines)) #"\s+"))]
         (let [output (last args)]
           (case table-rows
             [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
@@ -48,20 +48,20 @@
                 [(conj nodes {:type :names :num-inputs (count inputs) :table table-rows}) (conj edges (merge input-map {output :output}))]))))))))
 
 (defn manage-latch [block [nodes edges]]
-  (let [args (rest (str/split block #" |\n"))]
+  (let [args (rest (str/split (str/trim block) #"(\s|\n)+"))]
     (let [[input output type clock initial] args]
       [(conj nodes {:type :latch :trigger-type type :initial initial}) (conj edges {input :input output :output clock :clk})])))
 
 (defn manage-subckt [block [nodes edges]]
-  (let [args (drop 1 (str/split block #" "))]
+  (let [args (drop 1 (str/split (str/trim block) #"\s+"))]
     (let [model-name (first args)]
       (let [port-connections (rest args)]
         (let [node-name (str model-name (unique-id))]
-          (let [new-edges (map (fn [x] (let [[port source] (str/split x #"=")] {source (str node-name "." port)})) port-connections)]
+          (let [new-edges (map (fn [x] (let [[port source] (str/split (str/trim x) #"=")] {source (str node-name "." port)})) port-connections)]
             [(concat nodes [node-name]) (concat edges new-edges)]))))))
 
 (defn manage [block [nodes edges]]
-  (let [keyword (first (str/split block #" "))]
+  (let [keyword (first (str/split (str/trim block) #"\s+"))]
     (case keyword
       ".inputs" (manage-inputs block [nodes edges])
       ".outputs" (manage-outputs block [nodes edges])
@@ -162,17 +162,19 @@
     (format ".latch %s %s %s %s %s" input output trigger clk initial)))
 
 (defn generate-constant [node index edges]
-  (format ".names %s" (create-var index :output edges)))
+  (let [table (if (= :true (get node :value)) "\n 1" "")]
+    (format ".names %s %s" (create-var index :output edges) table)))
 
 (defn generate-names [node index edges]
   (let [input-labels (map input-keyword (range (get node :num-inputs)))]
-    (print input-labels)
-    (let [args (pr-str (map (fn [k] (create-var index k edges)) input-labels))]
-      (print args)
-      (print index)
+    ;;(print input-labels)
+    (let [args (map (fn [k] (create-var index k edges)) input-labels)]
+      ;;(print args)
+      ;;(print (first args))
+      ;;(print index)
       (let [output (create-var index :output edges)]
-        (print output)
-  (format ".names %s %s \n %s" args (create-var index :output edges) (get node :table))))))
+        ;;(print output)
+        (format ".names %s %s \n %s" (str/join " " args) (create-var index :output edges) (str/join "\n" (get node :table)))))))
 
 (defn generate [node index edges]
   (case (get node :type)
@@ -188,3 +190,6 @@
 
 (pp/pprint (let [[nodes edges] (genetic-representation "example.blif")]
        (map-indexed (fn [index node] (generate node index edges)) nodes)))
+
+(map print (str/join "\n" (let [[nodes edges] (genetic-representation "example.blif")]
+       (map-indexed (fn [index node] (generate node index edges)) nodes))))
