@@ -17,6 +17,14 @@
 (defn cells [s] (filter (fn [x] (str/includes? x ".outputs")) (str/split s (LINEEND))))
 (defn blocks [s] (filter (fn [x] (re-find (KEYWORD) x)) (str/split s (KEYWORD))))
 
+(defn check-unimplemented [s]
+  (let [lines (map str/trim (str/split s (LINEEND)))]
+    (let [keywords (filter identity (map (fn [x] (re-matches #"^\.\S+" x)) lines))]
+      (let [unrecognised (filter (fn [x] (not (re-find (KEYWORD) x))) keywords)]
+        (if (not (empty? unrecognised))
+          (binding [*out* *err*]
+            (println (format "Unrecognised Keywords: %s" (str/join " " unrecognised)))) nil)))))
+
 (defn manage-input-node [name] {:type :input})
 (defn manage-input-port [name] {name :output})
 (defn manage-inputs [block [nodes edges]]
@@ -76,7 +84,7 @@
     nil [nodes edges]
     (let [[head & tail] blocks]
       (parse' tail (manage head [nodes edges])))))
-(defn parse [s] (parse' (blocks s) [[] []]))
+(defn parse [s] (check-unimplemented s) (parse' (blocks s) [[] []]))
 
 ;;(print (manage-inputs ".inputs a b c d" [[] []]))
 ;;(print "------\n")
