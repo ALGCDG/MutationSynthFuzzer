@@ -76,8 +76,7 @@
       ".names" (manage-names block [nodes edges])
       ".subckt" (manage-subckt block [nodes edges])
       ".latch" (manage-latch block [nodes edges])
-      [nodes edges]
-      )))
+      [nodes edges])))
 
 (defn parse' [blocks [nodes edges]]
   (case blocks
@@ -101,7 +100,6 @@
 ;;(print (manage-outputs ".outputs x y z" [[] []]))
 ;;(print "------\n")
 ;;(print (manage-inputs ".inputs x y z" [[] []]))
-
 
 ;;(print (parse (slurp "i.cl.blif")))
 
@@ -191,13 +189,59 @@
     :latch (generate-latch node index edges)
     :constant (generate-constant node index edges)
     :names (generate-names node index edges)
-    (throw "Unrecognised Node Type encountered during BLIF generation.")
-))
+    (throw "Unrecognised Node Type encountered during BLIF generation.")))
 
 (print "\n--------\n")
 
 (pp/pprint (let [[nodes edges] (genetic-representation "example.blif")]
-       (map-indexed (fn [index node] (generate node index edges)) nodes)))
+             (map-indexed (fn [index node] (generate node index edges)) nodes)))
 
 (map print (str/join "\n" (let [[nodes edges] (genetic-representation "example.blif")]
-       (map-indexed (fn [index node] (generate node index edges)) nodes))))
+                            (map-indexed (fn [index node] (generate node index edges)) nodes))))
+
+;; Trying out corssover and mutation operators
+
+(defn change-latch-trigger [[nodes edges]]
+  (let [indexed-latch-nodes (filter (fn [[index node]] (= (get node :type) :latch)) (map-indexed vector nodes))]
+    (let [[modified-index node] (rand-nth indexed-latch-nodes)]
+      (let [other-triggers (set/difference #{:re, :fe, :as, :ah, :al} #{(get node :trigger-type)})]
+        (let [new-node (assoc node :trigger-type (rand-nth (into [] other-triggers)))]
+          [(assoc nodes modified-index new-node) edges])))))
+
+(defn change-constant-value [[nodes edges]]
+  (let [indexed-constant-nodes (filter (fn [[index node]] (= (get node :type) :constant)) (map-indexed vector nodes))]
+    (let [[modified-index node] (rand-nth indexed-constant-nodes)]
+      (let [new-node (assoc node :value (if (= (get node :value) :true) :false :true))]
+        [(assoc nodes modified-index new-node) edges]))))
+
+(defn update-edges [offset edges]
+  (map (fn [x]  (map (fn [y] (zipmap (map #(+ offset %) (keys y)) (vals y))) x)) edges))  ;; TODO, implement properly, may require going back to modify edge representation (replacing one key with another is annoying
+
+;;(defn fix-connection [port-to-node c]
+;;  (let [to-node [x] (rand-nth (into [] (get port-to-node (get x (keys x)))))]
+;;  (zipmap (map to-node c) (vals c))))
+;;
+;;(defn fix-edge [port-to-node edge]
+;;  (map fix-connection edge))
+
+(defn dumb-crossover [a b]
+  (let [[a-nodes a-edges] a
+        [b-nodes b-edges] b]
+    (let [b-offset-edges (update-edges (count a-nodes) b-edges)
+          joint-nodes (concat a-nodes b-nodes)]
+      (let [sampled-node-indices (random-sample 0.5 (range (count joint-nodes)))]
+        (let [sampled-nodes (map (fn [x] (get joint-nodes x)) sampled-node-indices)
+              sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
+          [sampled-nodes sampled-edges])))))
+
+(print "\n--------\n")
+(pp/pprint (dumb-crossover (genetic-representation "example.blif") (genetic-representation "example.blif")))
+
+(print "\n--------\n")
+(pp/pprint (change-latch-trigger (genetic-representation "example.blif")))
+
+(print "\n--------\n")
+(pp/pprint (change-constant-value (genetic-representation "example.blif")))
+
+(print "\n--------\n")
+(pp/pprint (let [[n e] (genetic-representation "example.blif")] (update-edges 10 e)))
