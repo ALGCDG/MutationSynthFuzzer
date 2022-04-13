@@ -4,6 +4,7 @@
 
 (defmacro LINEEND [] #"\n+")
 (defmacro KEYWORD [] #"(?=(\.names|\.subckt|\.inputs|\.outputs|\.latch|\.end))")
+(defmacro CNF-SYMBOLS [] ["0" "1" "-"])
 
 (defmacro unique-id [] "0")
 ;; modules
@@ -53,12 +54,13 @@
             ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
             (let [inputs (butlast args)]
               (let [input-map (apply merge (map-indexed (fn [index variable] {variable (input-keyword index)}) inputs))]
-                [(conj nodes {:type :names :num-inputs (count inputs) :table table-rows}) (conj edges (merge input-map {output :output}))]))))))))
+                (let [cnf (map (fn [x] (str/split x #"\s+")) table-rows)]
+                  [(conj nodes {:type :names :num-inputs (count inputs) :table cnf}) (conj edges (merge input-map {output :output}))])))))))))
 
 (defn manage-latch [block [nodes edges]]
   (let [args (rest (str/split (str/trim block) #"(\s|\n)+"))]
     (let [[input output type clock initial] args]
-      [(conj nodes {:type :latch :trigger-type type :initial initial}) (conj edges {input :input output :output clock :clk})])))
+      [(conj nodes {:type :latch :trigger-type type :initial (or initial "3")}) (conj edges {input :input output :output clock :clk})])))
 
 (defn manage-subckt [block [nodes edges]]
   (let [args (drop 1 (str/split (str/trim block) #"\s+"))]
@@ -180,7 +182,7 @@
       ;;(print index)
       (let [output (create-var index :output edges)]
         ;;(print output)
-        (format ".names %s %s \n %s" (str/join " " args) (create-var index :output edges) (str/join "\n" (get node :table)))))))
+        (format ".names %s %s \n %s" (str/join " " args) (create-var index :output edges) (str/join "\n" (map (fn [x] (str/join " " x)) (get node :table))))))))
 
 (defn generate [node index edges]
   (case (get node :type)
@@ -208,11 +210,44 @@
         (let [new-node (assoc node :trigger-type (rand-nth (into [] other-triggers)))]
           [(assoc nodes modified-index new-node) edges])))))
 
+(defn change-latch-initial [[nodes edges]]
+  (let [indexed-latch-nodes (filter (fn [[index node]] (= (get node :type) :latch)) (map-indexed vector nodes))]
+    (let [[modified-index node] (rand-nth indexed-latch-nodes)]
+      (let [other-initial (set/difference (set (range 4)) #{(get node :initial)})]
+        (let [new-node (assoc node :initial (rand-nth (into [] other-initial)))]
+          [(assoc nodes modified-index new-node) edges])))))
+
 (defn change-constant-value [[nodes edges]]
   (let [indexed-constant-nodes (filter (fn [[index node]] (= (get node :type) :constant)) (map-indexed vector nodes))]
     (let [[modified-index node] (rand-nth indexed-constant-nodes)]
       (let [new-node (assoc node :value (if (= (get node :value) :true) :false :true))]
         [(assoc nodes modified-index new-node) edges]))))
+
+;;(defn change-names-flip-term [[nodes edges]]
+;;  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
+;;    (let [[modified-index node] (rand-nth indexed-names-nodes)]
+;;      (let [original-table (get node :table)]
+;;        (let [new-table (rest (shuffle original-table))]
+;;          (let [new-node (assoc node :table new-table)]
+;;            [(assoc nodes modified-index new-node) edges]))))))
+
+(defn change-names-remove-clause [[nodes edges]]
+  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
+    (let [[modified-index node] (rand-nth indexed-names-nodes)]
+      (let [original-table (get node :table)]
+        (let [new-table (rest (shuffle original-table))]
+          (let [new-node (assoc node :table new-table)]
+            [(assoc nodes modified-index new-node) edges]))))))
+
+(defn change-names-add-clause [[nodes edges]]
+  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
+    (let [[modified-index node] (rand-nth indexed-names-nodes)]
+      (let [original-table (get node :table)]
+        (let [n (get node :num-inputs)]
+          (let [new-clause (take n (random-sample 0.1 (cycle (CNF-SYMBOLS))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
+            (let [new-table (conj original-table [new-clause])]
+              (let [new-node (assoc node :table new-table)]
+                [(assoc nodes modified-index new-node) edges]))))))))
 
 (defn update-edges [offset edges]
   (map (fn [x]  (map (fn [y] (zipmap (map #(+ offset %) (keys y)) (vals y))) x)) edges))  ;; TODO, implement properly, may require going back to modify edge representation (replacing one key with another is annoying
