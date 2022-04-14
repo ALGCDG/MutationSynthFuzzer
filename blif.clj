@@ -113,8 +113,8 @@
 ;; discover-source - finds nodes which have a port which uses this variable
 ;; discover-sink - finds nodes which have a port which uses this variable
 (defn discover-edge [var ports]
-  {:post [(filter (= 1 (count (filter (fn [x] (= x :output)) (apply merge %)))))]}  ;; Post condition that any edge has only one output
-  (filter identity (map-indexed (fn [index port] (if (.contains (keys port) var) {index (get port var)} nil)) ports)))
+  {:post [(= 1 (count (filter (partial = :output) (vals %))))]}  ;; Post condition that any edge has only one output
+  (apply merge (filter identity (map-indexed (fn [index port] (if (.contains (keys port) var) {index (get port var)} nil)) ports))))
 
 ;;(print (let [[nodes ports] (parse (slurp "example.blif"))] (discover-edge "clk" ports)))
 
@@ -140,7 +140,7 @@
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
-  (format "$%s" (str/replace (str/replace (pr-str (flatten (map keys edge))) #"\s" "_") #"\(|\)" "")))
+  (format "$%s" (str/replace (str/replace (pr-str (keys edge)) #"\s" "_") #"\(|\)" "")))
 
 ;;(print (edge-to-var '(1 2)))
 
@@ -148,8 +148,8 @@
   (let [check
         (fn [edge]
           (and
-           (.contains (flatten (map keys edge)) index)
-           (= (get (apply merge edge) index) port)))]
+           (.contains (keys edge) index)
+           (= (get edge index) port)))]
     (let [edge (filter check edges)]
       ;;(assert (= (count edge) 1))
       ;;(print (format "  Test %s  " (pr-str edge)))
@@ -250,7 +250,7 @@
               [(assoc nodes modified-index new-node) edges])))))))
 
 (defn update-edge [offset edge]
-  (map (fn [y] (zipmap (map #(+ offset %) (keys y)) (vals y))) edge))
+  (zipmap (map #(+ offset %) (keys edge)) (vals edge)))
 ;; TODO, implement properly, may require going back to modify edge representation (replacing one key with another is annoying
 
 (defn update-edges [offset edges]
