@@ -5,6 +5,7 @@
 (defmacro LINEEND [] #"\n+")
 (defmacro KEYWORD [] #"(?=(\.names|\.subckt|\.inputs|\.outputs|\.latch|\.end))")
 (defmacro CNF-SYMBOLS [] ["0" "1" "-"])
+(defmacro MISSING-EDGE [] :missing_edge)
 
 (defmacro unique-id [] "0")
 ;; modules
@@ -140,7 +141,7 @@
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
-  (format "$%s" (str/replace (str/replace (pr-str (keys edge)) #"\s" "_") #"\(|\)" "")))
+  (format "$%s" (str/replace (str/replace (pr-str (or (keys edge) (MISSING-EDGE))) #"\s" "_") #"\(|\)" "")))
 
 ;;(print (edge-to-var '(1 2)))
 
@@ -201,10 +202,15 @@
 (map print (str/join "\n" (let [[nodes edges] (genetic-representation "example.blif")]
                             (map-indexed (fn [index node] (generate node index edges)) nodes))))
 
+(defn generate-blif [[nodes edges]]
+  (format "%s\n.names %s" (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes)) (str (MISSING-EDGE))))
+
 ;; Trying out corssover and mutation operators
 
+(defn enumerate [col] (map-indexed vector col))
+
 (defn find-nodes-indexed [nodes type]
-  (filter (fn [[index node]] (= (get node :type) type)) (map-indexed vector nodes)))
+  (filter (fn [[index node]] (= (get node :type) type)) (enumerate nodes)))
 
 (defn rand-nodetype [nodes type] (rand-nth (find-nodes-indexed nodes type)))
 
@@ -256,16 +262,33 @@
 (defn update-edges [offset edges]
   (map (partial update-edge offset) edges))
 
+(defn fix-edge [index-update output-indices edge]
+  (apply (partial merge {}) (for [[index port] edge]
+                              (if (contains? index-update index)
+                                [(get index-update index) port]
+                                (if (= port :output)
+                                  [(rand-nth output-indices) port]
+                                  [:missing port])))))
+
+(pp/pprint (fix-edge {6 1 7 2 8 3} [] {6 :input, 7 :output, 8 :input0}))
+(pp/pprint (fix-edge {6 1} [11 12 13 14] {6 :input, 7 :output, 8 :input0}))
+
+(defn find-output-indices [nodes]
+  (map first (filter (fn [[index node]] (not= (get node :type) :output)) (enumerate nodes))))
+
 (defn dumb-crossover [[a-nodes a-edges] [b-nodes b-edges]]
   (let [b-offset-edges (update-edges (count a-nodes) b-edges)
         joint-nodes (concat a-nodes b-nodes)]
-    (let [sampled-node-indices (random-sample 0.5 (range (count joint-nodes)))]
-      (let [sampled-nodes (map (fn [x] (get joint-nodes x)) sampled-node-indices)
-            sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
-        [sampled-nodes sampled-edges]))))
+    (let [sampled-indices-nodes (random-sample 0.5 (enumerate joint-nodes))]
+      (let [index-map (set/map-invert (apply (partial merge {}) (enumerate (map first sampled-indices-nodes))))]
+        (let [sampled-nodes (map second sampled-indices-nodes)
+              sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
+          [sampled-nodes (map (partial fix-edge index-map (find-output-indices sampled-nodes)) sampled-edges)])))))
 
 (print "\n--------\n")
 (pp/pprint (dumb-crossover (genetic-representation "example.blif") (genetic-representation "example.blif")))
+
+(print (generate-blif (dumb-crossover (genetic-representation "example.blif") (genetic-representation "example.blif"))))
 
 (print "\n--------\n")
 (pp/pprint (change-latch-trigger (genetic-representation "example.blif")))
@@ -281,3 +304,15 @@
 (print "\n--------\n")
 (pp/pprint (change-names-remove-clause (genetic-representation "example.blif")))
 ;; TODO add sanity check that names must have at least one clause in its CNF (check when removing clauses)
+
+(defmacro MUTATIONS [] '[change-latch-trigger
+                         change-names-remove-clause
+                         change-names-add-clause
+                         change-constant-value
+                         change-latch-initial])
+
+(defn mutate [g] ((rand-nth (MUTATIONS)) g))
+
+(pp/pprint (mutate (genetic-representation "example.blif")))
+
+(print (generate-blif (-> (iterate mutate (genetic-representation "example.blif")) (nth 1000000))))
