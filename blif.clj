@@ -21,11 +21,11 @@
 
 (defn check-unimplemented [s]
   (let [lines (map str/trim (str/split s (LINEEND)))]
-    (let [keywords (filter identity (map (fn [x] (re-matches #"^\.\S+" x)) lines))]
-      (let [unrecognised (filter (fn [x] (not (re-find (KEYWORD) x))) keywords)]
+    (let [keywords (filter identity (map (partial re-matches #"^\.\S+") lines))]
+      (let [unrecognised (filter #(not (re-find (KEYWORD) %)) keywords)]
         (if (not (empty? unrecognised))
           (binding [*out* *err*]
-            (println (format "Unrecognised Keywords: %s" (str/join " " unrecognised)))) nil)))))
+            (println (format "Unrecognised Keywords: %s" (str/join " " unrecognised)))))))))
 
 (defn manage-input-node [name] {:type :input})
 (defn manage-input-port [name] {name :output})
@@ -47,21 +47,24 @@
 
 (defn manage-names [block [nodes edges]]
   (let [lines (str/split block (LINEEND))]
-    (let [table-rows (rest lines)]
-      (let [args (rest (str/split (str/trim (first lines)) #"\s+"))]
-        (let [output (last args)]
-          (case table-rows
-            [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
-            ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
-            (let [inputs (butlast args)]
-              (let [input-map (apply merge (map-indexed (fn [index variable] {variable (input-keyword index)}) inputs))]
-                (let [cnf (map (fn [x] (str/split x #"\s+")) table-rows)]
-                  [(conj nodes {:type :names :num-inputs (count inputs) :table cnf}) (conj edges (merge input-map {output :output}))])))))))))
+    (let [table-rows (rest lines)
+          args (rest (str/split (str/trim (first lines)) #"\s+"))]
+      (let [output (last args)]
+        (case table-rows
+          [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
+          ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
+          (let [inputs (butlast args)
+                cnf (map #(str/split % #"\s+") table-rows)]
+            (let [input-map (->> (map-indexed (fn [index variable] {variable (input-keyword index)}) inputs)
+                                 (apply merge))]
+              [(conj nodes {:type :names :num-inputs (count inputs) :table cnf})
+               (conj edges (merge input-map {output :output}))])))))))
 
 (defn manage-latch [block [nodes edges]]
   (let [args (rest (str/split (str/trim block) #"(\s|\n)+"))]
     (let [[input output type clock initial] args]
-      [(conj nodes {:type :latch :trigger-type type :initial (or initial "3")}) (conj edges {input :input output :output clock :clk})])))
+      [(conj nodes {:type :latch :trigger-type type :initial (or initial "3")})
+       (conj edges {input :input output :output clock :clk})])))
 
 (defn manage-subckt [block [nodes edges]]
   (let [args (drop 1 (str/split (str/trim block) #"\s+"))]
@@ -113,14 +116,16 @@
 
 ;; discover-source - finds nodes which have a port which uses this variable
 ;; discover-sink - finds nodes which have a port which uses this variable
-(defn discover-edge [var ports]
-  {:post [(= 1 (count (filter (partial = :output) (vals %))))]}  ;; Post condition that any edge has only one output
-  (apply merge (filter identity (map-indexed (fn [index port] (if (.contains (keys port) var) {index (get port var)} nil)) ports))))
+(defn discover-edge [ports var]
+  {:post [(= 1 (count (filter (partial = :output) (vals %))))]}  ;; Post condition, any edge has only one output
+  (->> (map-indexed (fn [index port] (if (contains? port var) {index (get port var)})) ports)
+       (filter identity)
+       (apply merge)))
 
 ;;(print (let [[nodes ports] (parse (slurp "example.blif"))] (discover-edge "clk" ports)))
 
 (defn ports-to-edges [ports]
-  (map (fn [x] (discover-edge x ports)) (get-vars ports)))
+  (map (partial discover-edge ports) (get-vars ports)))
 
 (defn genetic-representation [f]
   (let [[nodes ports] (parse (slurp f))]
@@ -141,7 +146,11 @@
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
-  (format "$%s" (str/replace (str/replace (pr-str (or (keys edge) (MISSING-EDGE))) #"\s" "_") #"\(|\)" "")))
+  (format "$%s" (-> (keys edge)
+                    (or ,,, (MISSING-EDGE))
+                    pr-str
+                    (str/replace ,,, #"\s" "_")
+                    (str/replace ,,, #"\(|\)" ""))))
 
 ;;(print (edge-to-var '(1 2)))
 
@@ -177,13 +186,16 @@
 (defn generate-names [node index edges]
   (let [input-labels (map input-keyword (range (get node :num-inputs)))]
     ;;(print input-labels)
-    (let [args (map (fn [k] (create-var index k edges)) input-labels)]
+    (let [args (map #(create-var index % edges) input-labels)]
       ;;(print args)
       ;;(print (first args))
       ;;(print index)
       (let [output (create-var index :output edges)]
         ;;(print output)
-        (format ".names %s %s \n %s" (str/join " " args) (create-var index :output edges) (str/join "\n" (map (fn [x] (str/join " " x)) (get node :table))))))))
+        (format ".names %s %s \n %s"
+                (str/join " " args)
+                (create-var index :output edges)
+                (str/join "\n" (map (partial str/join " ") (get node :table))))))))
 
 (defn generate [node index edges]
   (case (get node :type)
@@ -203,7 +215,9 @@
                             (map-indexed (fn [index node] (generate node index edges)) nodes))))
 
 (defn generate-blif [[nodes edges]]
-  (format "%s\n.names %s" (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes)) (str (MISSING-EDGE))))
+  (format "%s\n.names %s"
+          (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes))
+          (str (MISSING-EDGE))))
 
 ;; Trying out corssover and mutation operators
 
@@ -278,12 +292,17 @@
 
 (defn dumb-crossover [[a-nodes a-edges] [b-nodes b-edges]]
   (let [b-offset-edges (update-edges (count a-nodes) b-edges)
-        joint-nodes (concat a-nodes b-nodes)]
-    (let [sampled-indices-nodes (random-sample 0.5 (enumerate joint-nodes))]
-      (let [index-map (set/map-invert (apply (partial merge {}) (enumerate (map first sampled-indices-nodes))))]
-        (let [sampled-nodes (map second sampled-indices-nodes)
-              sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
-          [sampled-nodes (map (partial fix-edge index-map (find-output-indices sampled-nodes)) sampled-edges)])))))
+        sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))
+        [sampled-indices sampled-nodes] (->> (concat a-nodes b-nodes)
+                                             enumerate
+                                             (random-sample 0.5)
+                                             (apply map vector))
+        index-map (->> sampled-indices
+                       enumerate
+                       (apply (partial merge {}))
+                       set/map-invert)
+        edge-fixer (partial fix-edge index-map (find-output-indices sampled-nodes))]
+    [sampled-nodes (map edge-fixer sampled-edges)]))
 
 (print "\n--------\n")
 (pp/pprint (dumb-crossover (genetic-representation "example.blif") (genetic-representation "example.blif")))
@@ -315,4 +334,4 @@
 
 (pp/pprint (mutate (genetic-representation "example.blif")))
 
-(print (generate-blif (-> (iterate mutate (genetic-representation "example.blif")) (nth 1000000))))
+;;(print (generate-blif (-> (iterate mutate (genetic-representation "example.blif")) (nth 1000))))
