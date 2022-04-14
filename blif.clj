@@ -203,25 +203,27 @@
 
 ;; Trying out corssover and mutation operators
 
+(defn find-nodes-indexed [nodes type]
+  (filter (fn [[index node]] (= (get node :type) type)) (map-indexed vector nodes)))
+
+(defn rand-nodetype [nodes type] (rand-nth (find-nodes-indexed nodes type)))
+
 (defn change-latch-trigger [[nodes edges]]
-  (let [indexed-latch-nodes (filter (fn [[index node]] (= (get node :type) :latch)) (map-indexed vector nodes))]
-    (let [[modified-index node] (rand-nth indexed-latch-nodes)]
-      (let [other-triggers (set/difference #{:re, :fe, :as, :ah, :al} #{(get node :trigger-type)})]
-        (let [new-node (assoc node :trigger-type (rand-nth (into [] other-triggers)))]
-          [(assoc nodes modified-index new-node) edges])))))
+  (let [[modified-index node] (rand-nodetype nodes :latch)]
+    (let [other-triggers (set/difference #{:re, :fe, :as, :ah, :al} #{(get node :trigger-type)})]
+      (let [new-node (assoc node :trigger-type (rand-nth (into [] other-triggers)))]
+        [(assoc nodes modified-index new-node) edges]))))
 
 (defn change-latch-initial [[nodes edges]]
-  (let [indexed-latch-nodes (filter (fn [[index node]] (= (get node :type) :latch)) (map-indexed vector nodes))]
-    (let [[modified-index node] (rand-nth indexed-latch-nodes)]
-      (let [other-initial (set/difference (set (range 4)) #{(get node :initial)})]
-        (let [new-node (assoc node :initial (rand-nth (into [] other-initial)))]
-          [(assoc nodes modified-index new-node) edges])))))
+  (let [[modified-index node] (rand-nodetype nodes :latch)]
+    (let [other-initial (set/difference (set (range 4)) #{(get node :initial)})]
+      (let [new-node (assoc node :initial (rand-nth (into [] other-initial)))]
+        [(assoc nodes modified-index new-node) edges]))))
 
 (defn change-constant-value [[nodes edges]]
-  (let [indexed-constant-nodes (filter (fn [[index node]] (= (get node :type) :constant)) (map-indexed vector nodes))]
-    (let [[modified-index node] (rand-nth indexed-constant-nodes)]
-      (let [new-node (assoc node :value (if (= (get node :value) :true) :false :true))]
-        [(assoc nodes modified-index new-node) edges]))))
+  (let [[modified-index node] (rand-nodetype nodes :constant)]
+    (let [new-node (assoc node :value (if (= (get node :value) :true) :false :true))]
+      [(assoc nodes modified-index new-node) edges])))
 
 ;;(defn change-names-flip-term [[nodes edges]]
 ;;  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
@@ -232,42 +234,35 @@
 ;;            [(assoc nodes modified-index new-node) edges]))))))
 
 (defn change-names-remove-clause [[nodes edges]]
-  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
-    (let [[modified-index node] (rand-nth indexed-names-nodes)]
-      (let [original-table (get node :table)]
-        (let [new-table (rest (shuffle original-table))]
-          (let [new-node (assoc node :table new-table)]
-            [(assoc nodes modified-index new-node) edges]))))))
+  (let [[modified-index node] (rand-nodetype nodes :names)]
+    (let [original-table (get node :table)]
+      (let [new-table (rest (shuffle original-table))]
+        (let [new-node (assoc node :table new-table)]
+          [(assoc nodes modified-index new-node) edges])))))
 
 (defn change-names-add-clause [[nodes edges]]
-  (let [indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names)) (map-indexed vector nodes))]
-    (let [[modified-index node] (rand-nth indexed-names-nodes)]
-      (let [original-table (get node :table)]
-        (let [n (get node :num-inputs)]
-          (let [new-clause (take n (random-sample 0.1 (cycle (CNF-SYMBOLS))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
-            (let [new-table (conj original-table [new-clause])]
-              (let [new-node (assoc node :table new-table)]
-                [(assoc nodes modified-index new-node) edges]))))))))
+  (let [[modified-index node] (rand-nodetype nodes :names)]
+    (let [original-table (get node :table)]
+      (let [n (+ 1 (get node :num-inputs))]
+        (let [new-clause (take n (random-sample 0.1 (cycle (CNF-SYMBOLS))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
+          (let [new-table (conj original-table [new-clause])]
+            (let [new-node (assoc node :table new-table)]
+              [(assoc nodes modified-index new-node) edges])))))))
+
+(defn update-edge [offset edge]
+  (map (fn [y] (zipmap (map #(+ offset %) (keys y)) (vals y))) edge))
+;; TODO, implement properly, may require going back to modify edge representation (replacing one key with another is annoying
 
 (defn update-edges [offset edges]
-  (map (fn [x]  (map (fn [y] (zipmap (map #(+ offset %) (keys y)) (vals y))) x)) edges))  ;; TODO, implement properly, may require going back to modify edge representation (replacing one key with another is annoying
+  (map (partial update-edge offset) edges))
 
-;;(defn fix-connection [port-to-node c]
-;;  (let [to-node [x] (rand-nth (into [] (get port-to-node (get x (keys x)))))]
-;;  (zipmap (map to-node c) (vals c))))
-;;
-;;(defn fix-edge [port-to-node edge]
-;;  (map fix-connection edge))
-
-(defn dumb-crossover [a b]
-  (let [[a-nodes a-edges] a
-        [b-nodes b-edges] b]
-    (let [b-offset-edges (update-edges (count a-nodes) b-edges)
-          joint-nodes (concat a-nodes b-nodes)]
-      (let [sampled-node-indices (random-sample 0.5 (range (count joint-nodes)))]
-        (let [sampled-nodes (map (fn [x] (get joint-nodes x)) sampled-node-indices)
-              sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
-          [sampled-nodes sampled-edges])))))
+(defn dumb-crossover [[a-nodes a-edges] [b-nodes b-edges]]
+  (let [b-offset-edges (update-edges (count a-nodes) b-edges)
+        joint-nodes (concat a-nodes b-nodes)]
+    (let [sampled-node-indices (random-sample 0.5 (range (count joint-nodes)))]
+      (let [sampled-nodes (map (fn [x] (get joint-nodes x)) sampled-node-indices)
+            sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))]
+        [sampled-nodes sampled-edges]))))
 
 (print "\n--------\n")
 (pp/pprint (dumb-crossover (genetic-representation "example.blif") (genetic-representation "example.blif")))
@@ -280,3 +275,9 @@
 
 (print "\n--------\n")
 (pp/pprint (let [[n e] (genetic-representation "example.blif")] (update-edges 10 e)))
+
+(print "\n--------\n")
+(pp/pprint (change-names-add-clause (genetic-representation "example.blif")))
+(print "\n--------\n")
+(pp/pprint (change-names-remove-clause (genetic-representation "example.blif")))
+;; TODO add sanity check that names must have at least one clause in its CNF (check when removing clauses)
