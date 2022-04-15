@@ -1,0 +1,34 @@
+{
+:deps {org.clojure/data.json {:mvn/version "2.4.0"}}
+  ;; Paths
+  ;;   Directories in the current project to include in the classpath
+
+  ;; :paths ["src"]
+
+  ;; External dependencies
+ 
+  ;; :deps {
+  ;;   org.clojure/clojure {:mvn/version "1.10.3"}
+  ;; }
+
+  ;; Aliases
+	;;   resolve-deps aliases (-R) affect dependency resolution, options:
+	;;     :extra-deps - specifies extra deps to add to :deps
+	;;     :override-deps - specifies a coordinate to use instead of that in :deps
+	;;     :default-deps - specifies a coordinate to use for a lib if one isn't found
+	;;   make-classpath aliases (-C) affect the classpath generation, options:
+	;;     :extra-paths - vector of additional paths to add to the classpath
+	;;     :classpath-overrides - map of lib to path that overrides the result of resolving deps
+
+  ;; :aliases {
+  ;;   :deps {:extra-deps {org.clojure/tools.deps.alpha {:mvn/version "0.12.1158"}}}
+  ;;   :test {:extra-paths ["test"]}
+  ;; }
+
+  ;; Provider attributes
+
+  ;; :mvn/repos {
+  ;;   "central" {:url "https://repo1.maven.org/maven2/"}
+  ;;   "clojars" {:url "https://repo.clojars.org/"}
+  ;; }
+}
