@@ -5,7 +5,8 @@
   (:use blif.compose)
   (:use genetic.representation)
   (:use genetic.mutation)
-  (:use genetic.crossover))
+  (:use genetic.crossover)
+  (:use genetic.selection))
 
 (pp/pprint (parse (slurp "example.blif")))
 
@@ -45,3 +46,5 @@
 (pp/pprint (mutate (genetic-representation "example.blif")))
 
 (print (generate-blif (-> (iterate mutate (genetic-representation "example.blif")) (nth 1000))))
+
+(pp/pprint (count (next-population (repeat 10 (genetic-representation "example.blif")))))

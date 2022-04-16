@@ -33,3 +33,5 @@
                        set/map-invert)
         edge-fixer (partial fix-edge index-map (find-output-indices sampled-nodes))]
     [sampled-nodes (map edge-fixer sampled-edges)]))
+
+(defn crossover [[a b]] (dumb-crossover a b))
