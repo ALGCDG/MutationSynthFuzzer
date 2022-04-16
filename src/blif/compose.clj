@@ -1,5 +1,6 @@
 (ns blif.compose
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:require [util :refer [input-keyword]]))
 
 (defmacro MISSING-EDGE [] :missing_edge)
 
