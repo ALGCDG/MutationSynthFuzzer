@@ -56,12 +56,13 @@
        (conj edges {input :input output :output clock :clk})])))
 
 (defn manage-subckt [block [nodes edges]]
-  (let [args (drop 1 (str/split (str/trim block) #"\s+"))]
-    (let [model-name (first args)]
-      (let [port-connections (rest args)]
-        (let [node-name (str model-name (unique-id))]
-          (let [new-edges (map (fn [x] (let [[port source] (str/split (str/trim x) #"=")] {source (str node-name "." port)})) port-connections)]
-            [(concat nodes [node-name]) (concat edges new-edges)]))))))
+  (println "Uhoh SUBCKT") [nodes edges])
+;;  (let [args (drop 1 (str/split (str/trim block) #"\s+"))]
+;;    (let [model-name (first args)]
+;;      (let [port-connections (rest args)]
+;;        (let [node-name (str model-name (unique-id))]
+;;          (let [new-edges (map (fn [x] (let [[port source] (str/split (str/trim x) #"=")] {source (str node-name "." port)})) port-connections)]
+;;            [(concat nodes [node-name]) (concat edges new-edges)]))))))
 
 (defn manage [block [nodes edges]]
   (let [keyword (first (str/split (str/trim block) #"\s+"))]
@@ -69,14 +70,15 @@
       ".inputs" (manage-inputs block [nodes edges])
       ".outputs" (manage-outputs block [nodes edges])
       ".names" (manage-names block [nodes edges])
-      ".subckt" (manage-subckt block [nodes edges])
+      ;;".subckt" (manage-subckt block [nodes edges])
       ".latch" (manage-latch block [nodes edges])
       [nodes edges])))
 
-(defn parse' [blocks [nodes edges]]
-  (case blocks
-    nil [nodes edges]
-    (let [[head & tail] blocks]
-      (parse' tail (manage head [nodes edges])))))
-
-(defn parse [s] (check-unimplemented s) (parse' (blocks s) [[] []]))
+(defn parse [s]
+  (check-unimplemented s)
+  (loop [blcks (blocks s) [nodes edges] [[] []]]
+    (case blcks
+      '() [nodes edges]
+      nil [nodes edges]
+      (let [[head & tail] blcks]
+        (recur tail (manage head [nodes edges]))))))
