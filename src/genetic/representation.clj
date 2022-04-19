@@ -1,13 +1,13 @@
 (ns genetic.representation
   (:require [clojure.spec.alpha :as s])
-  (:require [blif.parser :refer [parse]]))
+  (:require [blif.parser :refer [parse get-modules]]))
 
 (defn get-vars [ports]
-  (let [vars (map keys ports)] (reduce concat vars)))
+  (let [vars (map keys ports)] (apply concat vars)))
 ;; to find edge genes, iterate through variables, find edges where they connect
 
 (defn discover-edge [ports var]
-  {:post [(s/valid? :node/edge %)]}  ;; Post condition, any edge has only one output
+  {:post [(s/assert :node/edge %)]}  ;; Post condition, any edge has only one output
   (->> (map-indexed (fn [index port] (if (contains? port var) {index (get port var)})) ports)
        (filter identity)
        (apply merge)))
@@ -16,8 +16,8 @@
   (map (partial discover-edge ports) (get-vars ports)))
 
 (defn genetic-representation [f]
-  (let [[nodes ports] (parse (slurp f))]
-    (let [edges (distinct (ports-to-edges ports))]
+  (let [[nodes ports] (parse (first (get-modules (slurp f))))]
+    (let [edges (ports-to-edges ports)]
       [nodes edges])))
 
 (s/def ::keyword #{:names :input :outputs :latch :constant})
