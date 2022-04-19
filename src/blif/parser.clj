@@ -7,7 +7,7 @@
 
 (defmacro unique-id [] "0")
 
-(defn get-modules [s] (filter (fn [x] (str/includes? x ".model")) (str/split s #"(?=.model)")))
+(defn get-modules [s] (filter (fn [x] (str/includes? x ".model")) (str/split s #"(?=\.model)")))
 (defn blocks [s] (filter (fn [x] (re-find (KEYWORD) x)) (str/split s (KEYWORD))))
 
 (defn check-unimplemented [s]

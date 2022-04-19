@@ -59,6 +59,6 @@
     (throw "Unrecognised Node Type encountered during BLIF generation.")))
 
 (defn generate-blif [[nodes edges]]
-  (format "%s\n.names %s"
+  (format ".model TEST\n%s\n.names %s\n.end"
           (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes))
           (str (MISSING-EDGE))))
