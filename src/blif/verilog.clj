@@ -17,7 +17,8 @@
     (println (format "Writing temporary blif file %s..." blif-file))
     (spit blif-file blif)
     (println (format "Yosys (%s) converting blif file %s to verilog file %s..." yosys-path blif-file verilog-file))
-    (yosys-convert yosys-path blif-file verilog-file)))
+    (yosys-convert yosys-path blif-file verilog-file)
+    verilog-file))
 
 (defn genetic-to-verilog [yosys-path g]
   (blif-to-verilog yosys-path (format "%X" (hash g)) (generate-blif g)))
