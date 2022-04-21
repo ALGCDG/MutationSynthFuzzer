@@ -1,0 +1,23 @@
+(ns genetic.tree
+  (:use genetic.mutation)
+  (:require [genetic.representation :refer [genetic-representation]])
+  (:require [genetic.crossover :refer [dumb-crossover]]))
+
+;; Represent generated tests as S expression of mutations and crossovers of original corpus.
+;; Allows us to create family tree of tests
+;; Potnetially useful for debugging evolution
+;; NB: useless until seeded randomness is used
+
+(defn add-mutation [g] `(~(rand-nth (MUTATIONS)) ~g))
+
+(defn add-crossover [a b] `(dumb-crossover ~a ~b))
+
+(def tree-eval (memoize eval))  ;; recognise already evaluated branches
+
+(add-mutation '(genetic-representation "example.blif.old"))
+
+(add-crossover '(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old"))
+
+(tree-eval (add-crossover '(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")))
+
+(-> (iterate add-mutation '(genetic-representation "example.blif.old")) (nth 5))
