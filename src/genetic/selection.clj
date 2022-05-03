@@ -1,7 +1,7 @@
 (ns genetic.selection
   (:require [clojure.data.json :as json])
   (:require [genetic.crossover :refer [crossover]])
-  (:require [genetic.mutation :refer [mutate]]))
+  (:require [genetic.tree :refer [add-mutation add-crossover]]))
 
 (defmacro NUM-SURVIVORS [] 10)
 (defmacro MUTATION-PROBABILITY [] 0.5)
@@ -10,10 +10,10 @@
 (defn next-population [population]
   (concat (->> population
                (random-sample (MUTATION-PROBABILITY))
-               (map mutate))
+               (map add-mutation))
           (->> (apply map list population population)
                (random-sample (CROSSOVER-PROBABILITY))
-               (map crossover))))
+               (map add-crossover))))
 
 (defn calculate-coverage [coverage-json] 0)  ;; PLACEHOLDER
 
