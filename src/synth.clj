@@ -1,6 +1,7 @@
 (ns synth
   (:require [clojure.string :as str])
-  (:require [clojure.java.shell :refer [sh]]))
+  (:require [clojure.java.shell :refer [sh]])
+  (:require [util :refer [log]]))
 
 (defmacro TIMEOUT [] 30)
 
@@ -15,16 +16,18 @@
                                  "fsm_opt"
                                  "onehot"])
 
-(defn synth-command [synth synth-path verilog-file]
+(defn synth-command [synth synth-path input-verilog-file output-verilog-file]
   (case synth
-    :yosys (format "%s -p \"read_verilog %s; synth; %s\""
+    :yosys (format "%s -p \"read_verilog %s; synth; %s\"; write_verilog %s"
                    synth-path
-                   verilog-file
-                   (str/join "; " (YOSYS-OPTIMISAIONS)))
-    (throw (format "Incompatable synthesizer %s" synth))))
+                   input-verilog-file
+                   (str/join "; " (YOSYS-OPTIMISAIONS))
+                   output-verilog-file)
+    (throw (Exception. (format "Incompatable synthesizer %s" synth)))))
 
-(defn run-synthesis [synth synth-path verilog-file]
-  (println (format "Synthesizing verilog file %s..." verilog-file))
-  (sh "bash" "-c" (format  "timeout %s %s"
+(defn run-synthesis [synth synth-path input-verilog-file output-verilog-file]
+  (log (format "Synthesizing verilog file %s..." input-verilog-file))
+  (sh "bash" "-c" (format  "timeout %s %s >> synth-log.txt 2> /dev/null"
                            (TIMEOUT)
-                           (synth-command synth synth-path verilog-file))))
+                           (synth-command synth synth-path input-verilog-file output-verilog-file)))
+  (log (format "Synthesized verilog file %s, output verilog availabe: %s!" input-verilog-file output-verilog-file)))

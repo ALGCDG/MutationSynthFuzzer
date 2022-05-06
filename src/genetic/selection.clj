@@ -8,12 +8,14 @@
 (defmacro CROSSOVER-PROBABILITY [] 0.2)
 
 (defn next-population [population]
-  (concat (->> population
-               (random-sample (MUTATION-PROBABILITY))
-               (map add-mutation))
-          (->> (apply map list population population)
-               (random-sample (CROSSOVER-PROBABILITY))
-               (map add-crossover))))
+  (let [survivors (take (NUM-SURVIVORS) (shuffle population))]
+    (concat survivors
+            (->> survivors
+                 (random-sample (MUTATION-PROBABILITY))
+                 (map add-mutation))
+            (->> (apply map list survivors survivors)
+                 (random-sample (CROSSOVER-PROBABILITY))
+                 (map add-crossover)))))
 
 (defn calculate-coverage [coverage-json] 0)  ;; PLACEHOLDER
 

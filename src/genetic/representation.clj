@@ -16,7 +16,7 @@
   (map (partial discover-edge ports) (get-vars ports)))
 
 (defn genetic-representation [f]
-  (let [[nodes ports] (parse (first (get-modules (slurp f))))]
+  (let [[nodes ports] (parse (or (first (get-modules (slurp f))) ""))]
     (let [edges (ports-to-edges ports)]
       [nodes edges])))
 

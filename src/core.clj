@@ -1,9 +1,40 @@
 (ns core
+  (:require [blif.verilog :refer [genetic-to-verilog]])
+  (:require [genetic.representation :refer [genetic-representation]])
+  (:require [genetic.selection :refer [next-population]])
+  (:require [synth :refer [run-synthesis]])
+  (:require [util :refer [log]])
+  (:require [ramdisk :refer [use-ramdisk]])
+  (:require [clojure.string :as str])
   (:require [clojure.java.shell :refer [sh]]))
 
-(defmacro DISK-SIZE [] 200e6)  ;; 200 MB
+(defmacro DISK-SIZE [] (int 200e6))  ;; 200 MB
 
-#_(defn fuzz [synth synth-path yosys-path corpus tmpfile])
+(defn test-genetic [synth synth-path yosys-path g tmpfile]
+  (log (format "Testing %s" g))
+  (try
+    (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path))
+          output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
+          synth-result (run-synthesis synth synth-path input-verilog-path output-verilog-file)]
+      #_(if (not= (synth-result :exit) 0)
+          nil
+          #_(spit (format "bug-%X.log" (hash g)) (str {:type :sanitizer :tree g :genetic (eval g) :result synth-result})))
+      #_(if (check-equivalence syb-path g input-verilog-path output-verilog-file)
+          (spit (format "bug-%X.log" (hash g)) {:type :equivalence :tree g :genetic (eval g) :result synth-result}))
+      #_(collect-coverage)
+      true)
+    (catch Exception e (log (format "Test Failed: %s, %s" g e)))))
+
+(defn fuzz [synth synth-path yosys-path corpus tmpfile]
+  (loop [current-population corpus
+         generation-count 0]
+    (log (format "Fuzzing generation %d" generation-count))
+    (try (log (format "Generation %d tested, %s"
+                      generation-count
+                      (time (mapv #(test-genetic synth synth-path yosys-path % tmpfile) current-population))))
+         (finally (spit "genetic-state.clj" (str current-population))))
+    (log "Developing next generation...")
+    (recur (next-population current-population) (+ 1 generation-count))))
 
 (defn check-file-exists [filepath err-msg]
   (assert (.exists (clojure.java.io/file filepath)) err-msg))
@@ -56,5 +87,12 @@
                    (format "Corpus directory path (%s) is not a directory!" corpus-dir))
   (check-contians-blifs corpus-dir)
   #_(check-blifs-contain-one-module)
-  (println "Starting Fuzzing...")
-  #_(use-ramdisk 200e6 (partial fuzz)))
+  (println (format "Reading Corpus: %s..." corpus-dir))
+  (let [corpus (->> corpus-dir
+                    clojure.java.io/file
+                    file-seq
+                    (filter #(str/includes? % "blif"))
+                    (map str)
+                    (mapv (fn [x] `(genetic-representation ~x))))]
+    (println "Starting Fuzzing...")
+    (use-ramdisk (DISK-SIZE) (partial fuzz (keyword synth) synth-path yosys-path corpus))))

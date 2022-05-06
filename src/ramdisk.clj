@@ -1,4 +1,5 @@
 (ns ramdisk
+  (:require [util :refer [log]])
   (:require [clojure.string :as str])
   (:require [clojure.java.shell :refer [sh]]))
 
@@ -9,6 +10,7 @@
 ;;  (sh "bash" "-c" (format "mount -o size=%d -t tmpfs none %s" size file)))
 
 (defn mount-macos [size]
+  (log "Mounting ramdisk in MacOS...")
   (let [numsectors (/ size 512)
         MB (/ (float size) 1000000)
         device (->> numsectors
@@ -21,22 +23,24 @@
                   file-seq
                   hash
                   (format "/tmp/fuzzmount%X"))]
-    (println (format "Using device %s, mounting into %s, size %.2f MB..." device file MB))
+    (log (format "Using device %s, mounting into %s, size %.2f MB..." device file MB))
     (sh "bash" "-c" (format "newfs_hfs %s" device))
     (sh "bash" "-c" (format "mkdir %s" file))
     (sh "bash" "-c" (format "mount -t hfs %s %s" device file))
+    (log "Mounted ramdisk in MacOS!")
     [file device]))
 
 (defn unmount-macos [[file device]]
+  (log "Unmounting ramdisk in MacOS...")
   (sh "bash" "-c" (format "umount %s" file)
   (sh "bash" "-c" (format "hdiutil detach %s" device))
-  (sh "bash" "-c" (format "rm -r %s" file))))
+  (sh "bash" "-c" (format "rm -r %s" file)))
+  (log "Unmounted ramdisk in MacOS!"))
 
 (defn use-ramdisk "To use ramdisk, provide function which uses the created ramdisk"
   [size func]
-  (->>  size
-        mount-macos
-        func
-        unmount-macos))
+  (let [resource (mount-macos size)]
+    (try (func resource)
+         (finally (unmount-macos resource)))))
 
 ;;(unmount-macos (mount-macos (* 512 128000)))
