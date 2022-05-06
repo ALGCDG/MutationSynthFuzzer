@@ -9,15 +9,15 @@
 
 (defn next-population [population]
   (let [survivors (take (NUM-SURVIVORS) (shuffle population))]
-    (concat survivors
-            (->> survivors
-                 (random-sample (MUTATION-PROBABILITY))
-                 (map add-mutation))
-            (->> (apply map list survivors survivors)
-                 (random-sample (CROSSOVER-PROBABILITY))
-                 (map add-crossover)))))
+    {:tested survivors
+     :untested (concat (->> survivors
+                            (random-sample (MUTATION-PROBABILITY))
+                            (map add-mutation))
+                       (->> (apply map list survivors survivors)
+                            (random-sample (CROSSOVER-PROBABILITY))
+                            (map add-crossover)))}))
 
-(defn calculate-coverage [coverage-json] 0)  ;; PLACEHOLDER
+(defn calculate-coverage [coverage-json] 0)  ;; PLACEHOLER
 
 ;;(defn run-synthesis [g]
 ;;  (let [generated-filename (format "%s.blif" (hash g))]

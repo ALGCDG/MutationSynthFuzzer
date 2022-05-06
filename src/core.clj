@@ -22,19 +22,25 @@
       #_(if (check-equivalence syb-path g input-verilog-path output-verilog-file)
           (spit (format "bug-%X.log" (hash g)) {:type :equivalence :tree g :genetic (eval g) :result synth-result}))
       #_(collect-coverage)
-      true)
+      g)
     (catch Exception e (log (format "Test Failed: %s, %s" g e)))))
 
 (defn fuzz [synth synth-path yosys-path corpus tmpfile]
-  (loop [current-population corpus
+  (loop [current-population {:tested [] :untested corpus}
          generation-count 0]
     (log (format "Fuzzing generation %d" generation-count))
-    (try (log (format "Generation %d tested, %s"
-                      generation-count
-                      (time (mapv #(test-genetic synth synth-path yosys-path % tmpfile) current-population))))
-         (finally (spit "genetic-state.clj" (str current-population))))
-    (log "Developing next generation...")
-    (recur (next-population current-population) (+ 1 generation-count))))
+    (let [error-free-population (try
+                                  (->> current-population
+                                       :untested
+                                       (mapv #(test-genetic synth synth-path yosys-path % tmpfile))
+                                       (filter identity))
+                                  (catch Exception e
+                                    (spit "genetic-state.clj" (str current-population))
+                                    (throw e)))]
+      (log "Developing next generation...")
+      (recur (next-population (concat (:tested current-population)
+                                      error-free-population))
+             (+ 1 generation-count)))))
 
 (defn check-file-exists [filepath err-msg]
   (assert (.exists (clojure.java.io/file filepath)) err-msg))
