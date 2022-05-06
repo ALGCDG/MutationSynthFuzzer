@@ -28,10 +28,10 @@
 
 (println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [sby-path]
-  (let [config-filepath " config.sby "]
-    (spit config-filepath (sby-template [" top.v " " pre.v " " post.v "]))
-    (sh " bash " " -c " (format " %s -t %s " sby-path config-filepath))))
+(defn run-sby [sby-path top-path pre-synth-path post-synth-path]
+  (let [config-filepath "config.sby"]
+    (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
+    (sh "bash" "-c" (format "%s -t %s" sby-path config-filepath))))
 
 ;; Verilog Top File Templating
 
@@ -95,3 +95,8 @@
                          (str/join "\n"))))))
 
 (println (top (genetic-representation "example.blif.old")))
+
+(defn check-equivalence [syb-path g pre-synth-path post-synth-path]
+  (let [top-path "top.v"]
+    (spit "top.v" (top g))
+    (run-sby syb-path top-path pre-synth-path post-synth-path)))
