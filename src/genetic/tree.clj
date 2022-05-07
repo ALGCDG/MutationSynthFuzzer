@@ -8,15 +8,23 @@
 ;; Potnetially useful for debugging evolution
 ;; NB: useless until seeded randomness is used
 
-(defn add-mutation [g] `(~(rand-nth (MUTATIONS)) ~g))
+(defn add-mutation [g] `(~(random-mutation) ~(rand-int Integer/MAX_VALUE) ~g))
 
-(defn add-crossover [[a b]] `(dumb-crossover ~a ~b))
+(defn add-crossover [[a b]] `(dumb-crossover ~(rand-int Integer/MAX_VALUE) ~a ~b))
 
 (def tree-eval (memoize eval))  ;; recognise already evaluated branches
 
 (add-mutation '(genetic-representation "example.blif.old"))
 
+(println (add-mutation `(genetic-representation "example.blif.old")))
+
+(eval (add-mutation '(genetic-representation "example.blif.old")))
+
 (add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")])
+
+(eval (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
+
+(println (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
 
 (tree-eval (add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")]))
 

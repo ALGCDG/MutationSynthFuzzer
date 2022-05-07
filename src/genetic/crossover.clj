@@ -1,6 +1,7 @@
 (ns genetic.crossover
   (:require [clojure.set :as set])
-  (:require [util :refer [enumerate]]))
+  (:require [util :refer [enumerate]])
+  (:require [pure-random :refer [generate-seeds pure-rand-nth pure-sample]]))
 
 (defn update-edge [offset edge]
   (zipmap (map #(+ offset %) (keys edge)) (vals edge)))
@@ -9,29 +10,30 @@
 (defn update-edges [offset edges]
   (map (partial update-edge offset) edges))
 
-(defn fix-edge [index-update output-indices edge]
-  (apply (partial merge {}) (for [[index port] edge]
+(defn fix-edge [seed index-update output-indices edge]
+  (apply (partial merge {}) (for [[[index port] route-seed] (mapv vector edge (generate-seeds seed (count edge)))]
                               (if (contains? index-update index)
                                 [(get index-update index) port]
                                 (if (= port :output)
-                                  [(rand-nth output-indices) port]
+                                  [(pure-rand-nth route-seed output-indices) port]
                                   [:missing port])))))
 
 (defn find-output-indices [nodes]
-  (map first (filter (fn [[index node]] (not= (get node :type) :output)) (enumerate nodes))))
+  (mapv first (filter (fn [[index node]] (not= (get node :type) :output)) (enumerate nodes))))
 
-(defn dumb-crossover [[a-nodes a-edges] [b-nodes b-edges]]
-  (let [b-offset-edges (update-edges (count a-nodes) b-edges)
-        sampled-edges (random-sample 0.5 (concat a-edges b-offset-edges))
+(defn dumb-crossover [seed [a-nodes a-edges] [b-nodes b-edges]]
+  (let [[nodes-seed edges-seed fix-seed] (generate-seeds seed 3)
+        b-offset-edges (update-edges (count a-nodes) b-edges)
+        sampled-edges (pure-sample edges-seed 0.5 (concat a-edges b-offset-edges))
         [sampled-indices sampled-nodes] (->> (concat a-nodes b-nodes)
                                              enumerate
-                                             (random-sample 0.5)
-                                             (apply map vector))
+                                             (pure-sample nodes-seed 0.5)
+                                             (apply mapv vector))
         index-map (->> sampled-indices
                        enumerate
                        (apply (partial merge {}))
                        set/map-invert)
-        edge-fixer (partial fix-edge index-map (find-output-indices sampled-nodes))]
-    [sampled-nodes (map edge-fixer sampled-edges)]))
+        edge-fixer (partial fix-edge fix-seed index-map (find-output-indices sampled-nodes))]
+    [sampled-nodes (mapv edge-fixer sampled-edges)]))
 
 (defn crossover [[a b]] (dumb-crossover a b))

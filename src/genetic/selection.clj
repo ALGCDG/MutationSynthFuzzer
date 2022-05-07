@@ -1,11 +1,12 @@
 (ns genetic.selection
   (:require [clojure.data.json :as json])
+  (:require [clojure.math.combinatorics :refer [cartesian-product]])
   (:require [genetic.crossover :refer [crossover]])
   (:require [genetic.tree :refer [add-mutation add-crossover]]))
 
 (defmacro NUM-SURVIVORS [] 10)
 (defmacro MUTATION-PROBABILITY [] 0.5)
-(defmacro CROSSOVER-PROBABILITY [] 0.2)
+(defmacro CROSSOVER-PROBABILITY [] 0.01)
 
 (defn next-population [population]
   (let [survivors (take (NUM-SURVIVORS) (shuffle population))]
@@ -13,7 +14,7 @@
      :untested (concat (->> survivors
                             (random-sample (MUTATION-PROBABILITY))
                             (map add-mutation))
-                       (->> (apply map list survivors survivors)
+                       (->> (cartesian-product survivors survivors)
                             (random-sample (CROSSOVER-PROBABILITY))
                             (map add-crossover)))}))
 
