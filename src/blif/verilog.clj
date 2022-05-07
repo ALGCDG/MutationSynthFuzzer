@@ -18,7 +18,8 @@
     (log (format "Writing temporary blif file %s..." blif-file))
     (spit blif-file blif)
     (log (format "Yosys (%s) converting blif file %s to verilog file %s..." yosys-path blif-file verilog-file))
-    (yosys-convert yosys-path blif-file verilog-file)
+    (if (not= (:exit (yosys-convert yosys-path blif-file verilog-file)) 0)
+      (throw (ex-info "BLIF conversion failure" {:type :convert-fail})))
     verilog-file))
 
 (defn genetic-to-verilog [yosys-path g]

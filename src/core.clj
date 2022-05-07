@@ -16,14 +16,15 @@
     (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
           synth-result (run-synthesis synth synth-path input-verilog-path output-verilog-file)]
-      #_(if (not= (synth-result :exit) 0)
-          nil
-          #_(spit (format "bug-%X.log" (hash g)) (str {:type :sanitizer :tree g :genetic (eval g) :result synth-result})))
-      #_(if (check-equivalence syb-path g input-verilog-path output-verilog-file)
-          (spit (format "bug-%X.log" (hash g)) {:type :equivalence :tree g :genetic (eval g) :result synth-result}))
+      #_(check-equivalence syb-path g input-verilog-path output-verilog-file)
       #_(collect-coverage)
       g)
-    (catch Exception e (log (format "Test Failed: %s, %s" g e)))))
+    (catch Exception e
+      (case (:type (ex-data e))
+        :synth-fail (spit (format "%X.bug.log" (hash g)) {:input g :error (ex-data e)})
+        :equiv-fail (spit (format "%X.bug.log" (hash g)) {:input g :error (ex-data e)})
+        :convert-fail (log (format "Failed to convert %s to verilog" g))
+        (log (format "Test Failed: %s, %s" g e))))))
 
 (defn fuzz [synth synth-path yosys-path corpus tmpfile]
   (loop [current-population {:tested [] :untested corpus}
