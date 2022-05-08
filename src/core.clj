@@ -1,4 +1,5 @@
 (ns core
+  (:require [blif.compose :refer [generate-blif]])
   (:require [blif.verilog :refer [genetic-to-verilog]])
   (:require [genetic.representation :refer [genetic-representation]])
   (:require [genetic.selection :refer [next-population]])
@@ -13,16 +14,18 @@
 (defn test-genetic [synth synth-path yosys-path g tmpfile]
   (log (format "Testing %s" g))
   (try
-    (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path))
+    (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path tmpfile))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
           synth-result (run-synthesis synth synth-path input-verilog-path output-verilog-file)]
       #_(check-equivalence syb-path g input-verilog-path output-verilog-file)
       #_(collect-coverage)
+      (sh "rm" input-verilog-path)
+      (sh "rm" output-verilog-file)
       g)
     (catch Exception e
       (case (:type (ex-data e))
-        :synth-fail (spit (format "%X.bug.log" (hash g)) {:input g :error (ex-data e)})
-        :equiv-fail (spit (format "%X.bug.log" (hash g)) {:input g :error (ex-data e)})
+        :synth-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :generated-blif (->> g eval generate-blif) :error (ex-data e)})
+        :equiv-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :generated-blif (->> g eval generate-blif) :error (ex-data e)})
         :convert-fail (log (format "Failed to convert %s to verilog" g))
         (log (format "Test Failed: %s, %s" g e))))))
 
@@ -39,7 +42,7 @@
     (log (format "Fuzzing generation %d" generation-count))
     (let [new-shutdown-hook (Thread. (partial dump-genetic-state current-population generation-count))]
       (.addShutdownHook (Runtime/getRuntime) new-shutdown-hook)
-      (if shutdown-hook (.removeShutdownHook (Runtime/getRuntime) new-shutdown-hook))
+      (if shutdown-hook (.removeShutdownHook (Runtime/getRuntime) shutdown-hook))
       (let [error-free-population (try
                                     (->> current-population
                                          :untested

@@ -12,15 +12,17 @@
                           yosys-path
                           (CONVERT-ARGS blif-filename verilog-filename))))
 
-(defn blif-to-verilog [yosys-path name blif]
-  (let [blif-file (format "%s.blif" name)
-        verilog-file (format "%s.v" name)]
+(defn blif-to-verilog [yosys-path dir name blif]
+  (let [blif-file (format "%s/%s.blif" dir name)
+        verilog-file (format "%s/%s.v" dir name)]
     (log (format "Writing temporary blif file %s..." blif-file))
     (spit blif-file blif)
     (log (format "Yosys (%s) converting blif file %s to verilog file %s..." yosys-path blif-file verilog-file))
-    (if (not= (:exit (yosys-convert yosys-path blif-file verilog-file)) 0)
-      (throw (ex-info "BLIF conversion failure" {:type :convert-fail})))
-    verilog-file))
+    (let [convert-result (yosys-convert yosys-path blif-file verilog-file)]
+      (sh "rm" blif-file)
+      (if (not= (:exit convert-result) 0)
+        (throw (ex-info "BLIF conversion failure" {:type :convert-fail})))
+      verilog-file)))
 
-(defn genetic-to-verilog [yosys-path g]
-  (blif-to-verilog yosys-path (format "%X" (hash g)) (generate-blif g)))
+(defn genetic-to-verilog [yosys-path dir g]
+  (blif-to-verilog yosys-path dir (format "%X" (hash g)) (generate-blif g)))
