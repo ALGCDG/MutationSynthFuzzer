@@ -26,22 +26,32 @@
         :convert-fail (log (format "Failed to convert %s to verilog" g))
         (log (format "Test Failed: %s, %s" g e))))))
 
+(defn dump-genetic-state [population generation-count]
+  (log (format "Shutting down, dumping current genetic state of generation %d..."
+               generation-count))
+  (spit (format "state%d.clj" generation-count)
+        population))
+
 (defn fuzz [synth synth-path yosys-path corpus tmpfile]
   (loop [current-population {:tested [] :untested corpus}
-         generation-count 0]
+         generation-count 0
+         shutdown-hook nil]
     (log (format "Fuzzing generation %d" generation-count))
-    (let [error-free-population (try
-                                  (->> current-population
-                                       :untested
-                                       (mapv #(test-genetic synth synth-path yosys-path % tmpfile))
-                                       (filter identity))
-                                  (catch Exception e
-                                    (spit "genetic-state.clj" (str current-population))
-                                    (throw e)))]
-      (log "Developing next generation...")
-      (recur (next-population (concat (:tested current-population)
-                                      error-free-population))
-             (+ 1 generation-count)))))
+    (let [new-shutdown-hook (Thread. (partial dump-genetic-state current-population generation-count))]
+      (.addShutdownHook (Runtime/getRuntime) new-shutdown-hook)
+      (if shutdown-hook (.removeShutdownHook (Runtime/getRuntime) new-shutdown-hook))
+      (let [error-free-population (try
+                                    (->> current-population
+                                         :untested
+                                         (mapv #(test-genetic synth synth-path yosys-path % tmpfile))
+                                         (filter identity))
+                                    (catch Exception e
+                                      (throw e)))]
+        (log "Developing next generation...")
+        (recur (next-population (concat (:tested current-population)
+                                        error-free-population))
+               (+ 1 generation-count)
+               new-shutdown-hook)))))
 
 (defn check-file-exists [filepath err-msg]
   (assert (.exists (clojure.java.io/file filepath)) err-msg))
