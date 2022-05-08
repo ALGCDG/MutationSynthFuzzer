@@ -66,8 +66,9 @@
 
 (defn use-ramdisk "To use ramdisk, provide function which uses the created ramdisk"
   [size func]
-  (let [resource (mount size)]
-    (try (func resource)
-         (finally (unmount resource)))))
+  (let [resource (mount size)
+        [file device] resource]
+    (.addShutdownHook (Runtime/getRuntime) (Thread. (partial unmount resource)))
+    (func file)))
 
 ;;(unmount-macos (mount-macos (* 512 128000)))
