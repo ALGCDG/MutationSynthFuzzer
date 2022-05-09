@@ -24,8 +24,8 @@
       g)
     (catch Exception e
       (case (:type (ex-data e))
-        :synth-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :generated-blif (->> g eval generate-blif) :error (ex-data e)})
-        :equiv-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :generated-blif (->> g eval generate-blif) :error (ex-data e)})
+        :synth-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
+        :equiv-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
         :convert-fail (log (format "Failed to convert %s to verilog" g))
         (log (format "Test Failed: %s, %s" g e))))))
 
