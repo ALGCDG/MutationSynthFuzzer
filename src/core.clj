@@ -6,18 +6,19 @@
   (:require [synth :refer [run-synthesis]])
   (:require [util :refer [log]])
   (:require [ramdisk :refer [use-ramdisk]])
+  (:require [equivalence :refer [check-equivalence]])
   (:require [clojure.string :as str])
   (:require [clojure.java.shell :refer [sh]]))
 
 (defmacro DISK-SIZE [] (int 200e6))  ;; 200 MB
 
-(defn test-genetic [synth synth-path yosys-path g tmpfile]
+(defn test-genetic [synth synth-path yosys-path sby-path abc-path g tmpfile]
   (log (format "Testing %s" g))
   (try
     (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path tmpfile))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
           synth-result (run-synthesis synth synth-path input-verilog-path output-verilog-file)]
-      #_(check-equivalence syb-path g input-verilog-path output-verilog-file)
+      (check-equivalence sby-path yosys-path abc-path (eval g) tmpfile input-verilog-path output-verilog-file)
       #_(collect-coverage)
       (sh "rm" input-verilog-path)
       (sh "rm" output-verilog-file)
@@ -35,7 +36,7 @@
   (spit (format "state%d.clj" generation-count)
         population))
 
-(defn fuzz [synth synth-path yosys-path corpus tmpfile]
+(defn fuzz [synth synth-path yosys-path sby-path abc-path corpus tmpfile]
   (loop [current-population {:tested [] :untested corpus}
          generation-count 0
          shutdown-hook nil]
@@ -46,7 +47,7 @@
       (let [error-free-population (try
                                     (->> current-population
                                          :untested
-                                         (mapv #(test-genetic synth synth-path yosys-path % tmpfile))
+                                         (mapv #(test-genetic synth synth-path yosys-path sby-path abc-path % tmpfile))
                                          (filter identity))
                                     (catch Exception e
                                       (throw e)))]
@@ -81,7 +82,7 @@
     (assert (re-matches #"(?s)Yosys\s.*" (version :out))
             (format "Executable does not identify as Yosys, outputs: %s" (version :out)))))
 
-(defn -main [synth synth-path yosys-path corpus-dir & others]
+(defn -main [synth synth-path yosys-path corpus-dir sby-path abc-path & others]
   ;; Check provided arguments are valid
   ;; synth is a known synthesizer
   (assert (#{:yosys} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
@@ -115,4 +116,4 @@
                     (map str)
                     (mapv (fn [x] `(genetic-representation ~x))))]
     (println "Starting Fuzzing...")
-    (use-ramdisk (DISK-SIZE) (partial fuzz (keyword synth) synth-path yosys-path corpus))))
+    (use-ramdisk (DISK-SIZE) (partial fuzz (keyword synth) synth-path yosys-path sby-path abc-path corpus))))

@@ -1,14 +1,15 @@
 (ns equivalence
   (:require [clojure.string :as str])
   (:require [clojure.java.shell :refer [sh]])
-  (:require [blif.compose :refer [create-var]])
+  (:require [blif.compose :refer [create-var GENERATED-MODULE-NAME]])
+  (:require [synth :refer [SYNTHED-MODULE-NAME]])
   (:require [genetic.representation :refer [genetic-representation]]))
 
 ;; Equivalence checking using Sby
 
 ;; Sby script
 
-(defn read-formal [file] (format "read -format %s" file))
+(defn read-formal [file] (format "read -formal %s" file))
 
 (defn sby-template [files]
   (format
@@ -28,10 +29,14 @@
 
 (println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [sby-path top-path pre-synth-path post-synth-path]
-  (let [config-filepath "config.sby"]
+(defn run-sby [sby-path yosys-path abc-path tmpfile top-path pre-synth-path post-synth-path]
+  (let [config-filepath (format "%s/equiv_check.sby" tmpfile)]
     (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
-    (sh "bash" "-c" (format "%s -t %s" sby-path config-filepath))))
+    (sh "bash" "-c" (format "python3 %s --yosys %s --abc %s -t %s"
+                            sby-path
+                            yosys-path
+                            abc-path
+                            config-filepath))))
 
 ;; Verilog Top File Templating
 
@@ -81,11 +86,11 @@
     (module "top" (concat top-inputs top-pre-outputs top-post-outputs)
             (str/join "\n" (map input top-inputs))
             (str/join "\n" (map output (concat top-pre-outputs top-post-outputs)))
-            (instance "presynth" "presynth"
+            (instance (GENERATED-MODULE-NAME) "pre"
                       (merge
                        (zipmap sut-inputs top-inputs)
                        (zipmap sut-outputs top-pre-outputs)))
-            (instance "postsynth" "postsynth"
+            (instance (SYNTHED-MODULE-NAME) "post"
                       (merge
                        (zipmap sut-inputs top-inputs)
                        (zipmap sut-outputs top-post-outputs)))
@@ -96,7 +101,10 @@
 
 (println (top (genetic-representation "example.blif.old")))
 
-(defn check-equivalence [syb-path g pre-synth-path post-synth-path]
-  (let [top-path "top.v"]
-    (spit "top.v" (top g))
-    (run-sby syb-path top-path pre-synth-path post-synth-path)))
+(defn check-equivalence [syb-path yosys-path abc-path g tmpfile pre-synth-path post-synth-path]
+  (let [top-path (format "%s/top.v" tmpfile)]
+    (spit top-path (top g))
+    (let [proof-result (run-sby syb-path yosys-path abc-path tmpfile top-path pre-synth-path post-synth-path)]
+      (sh "rm" top-path)
+      (if (not= (:exit proof-result) 0)
+        (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))

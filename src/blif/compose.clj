@@ -4,10 +4,12 @@
 
 (defmacro MISSING-EDGE [] :missing_edge)
 
+(defmacro GENERATED-MODULE-NAME [] "presynth")
+
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
-  (format "$%s" (-> (keys edge)
+  (format "wire%s" (-> (keys edge)
                     (or ,,, (MISSING-EDGE))
                     pr-str
                     (str/replace ,,, #"\s" "_")
@@ -59,6 +61,7 @@
     (throw "Unrecognised Node Type encountered during BLIF generation.")))
 
 (defn generate-blif [[nodes edges]]
-  (format ".model TEST\n%s\n.names %s\n.end"
+  (format ".model %s\n%s\n.names %s\n.end"
+          (GENERATED-MODULE-NAME)
           (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes))
           (str (MISSING-EDGE))))
