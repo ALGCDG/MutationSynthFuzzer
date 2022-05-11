@@ -68,6 +68,8 @@
 
 (defn assert-equivalent [[siga sigb]] (vassert (format "%s == %s" siga sigb)))
 
+(defmacro TOP-CLK [] "clk")
+
 (defn top [[nodes edges]]
   (let [indexed-nodes (map-indexed (fn [index node] (merge node {:index index})) nodes)
         sut-inputs (->> indexed-nodes
@@ -83,7 +85,8 @@
         top-inputs (take (count sut-inputs) (map #(format "x_%s" %) (range)))
         top-pre-outputs (take (count sut-outputs) (map #(format "y_pre_%s" %) (range)))
         top-post-outputs (take (count sut-outputs) (map #(format "y_post_%s" %) (range)))]
-    (module "top" (concat top-inputs top-pre-outputs top-post-outputs)
+    (module "top" (concat [(TOP-CLK)] top-inputs top-pre-outputs top-post-outputs)
+            (input (TOP-CLK))
             (str/join "\n" (map input top-inputs))
             (str/join "\n" (map output (concat top-pre-outputs top-post-outputs)))
             (instance (GENERATED-MODULE-NAME) "pre"
@@ -94,7 +97,7 @@
                       (merge
                        (zipmap sut-inputs top-inputs)
                        (zipmap sut-outputs top-post-outputs)))
-            (always "posedge" "clk"
+            (always "posedge" (TOP-CLK)
                     (->> (map vector top-pre-outputs top-post-outputs)
                          (map assert-equivalent)
                          (str/join "\n"))))))
