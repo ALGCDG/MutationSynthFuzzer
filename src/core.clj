@@ -82,38 +82,56 @@
     (assert (re-matches #"(?s)Yosys\s.*" (version :out))
             (format "Executable does not identify as Yosys, outputs: %s" (version :out)))))
 
+(defn check-abc [filepath]
+  (let [version (sh "bash" "-c" (format "%s -h" filepath))]
+    (assert (= 1 (version :exit))
+            "Could not run -h command with abc")
+    (assert (re-matches #"(?s)UC\sBerkeley,\sABC\s.*" (version :out))
+            (format "Executable does not identify as ABC, outputs: %s" (version :out)))))
+
 (defn -main [synth synth-path yosys-path corpus-dir sby-path abc-path & others]
   ;; Check provided arguments are valid
   ;; synth is a known synthesizer
   (assert (#{:yosys} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
   ;; synth-path is a valid filepath to a executable
-  (println (format "Checking Synth Under Test path: %s ..." synth-path))
+  (log (format "Checking Synth Under Test path: %s ..." synth-path))
   (check-file-exists synth-path
                      (format "Path to Synth Under Test (%s) is not a valid filepath!" synth-path))
   (check-file-executable synth-path
                          (format "Path to Synth Under Test (%s) is not an executable!" synth-path))
   ;; TODO: Check instrumented and can collect coverage
   ;; yosys-path is a valid filepath to a executable (maybe verify that it really is yosys and that it is correctly insturmented)
-  (println (format "Checking Yosys path: %s ..." synth-path))
+  (log (format "Checking Yosys path: %s ..." synth-path))
   (check-file-exists yosys-path
                      (format "Path to Yosys (%s) is not a valid filepath!" yosys-path))
   (check-file-executable yosys-path
                          (format "Path to Yosys (%s) is not an executable!" yosys-path))
   (check-yosys yosys-path)
   ;; corpus-dir, check that it is a valid filepath to a directory (maybe that it contains blif files and that each blif contians one module)
-  (println (format "Checking Corpus: %s ..." corpus-dir))
+  (log (format "Checking Corpus: %s ..." corpus-dir))
   (check-file-exists corpus-dir
                      (format "Corpus directory (%s) does not exist!" corpus-dir))
   (check-directory corpus-dir
                    (format "Corpus directory path (%s) is not a directory!" corpus-dir))
   (check-contians-blifs corpus-dir)
   #_(check-blifs-contain-one-module)
-  (println (format "Reading Corpus: %s..." corpus-dir))
+  ;; Check sby-path
+  (log (format "Checking Sby path: %s ..." sby-path))
+  (check-file-exists sby-path (format "Path to sby (%s) does not exist!" sby-path))
+  ;; Check python3 available
+  (assert (->> (sh "command" "-v" "python3") :exit (= 0)) "Could not find python3 command, required for equivalence check.")
+  ;; Check abc-path
+  (log (format "Checking ABC path: %s ..." abc-path))
+  (check-file-exists abc-path (format "Path to abc (%s) does not exist!" abc-path))
+  (check-file-executable abc-path
+                         (format "Path to abc (%s) is not an executable!" abc-path))
+  (check-abc abc-path)
+  (log (format "Reading Corpus: %s..." corpus-dir))
   (let [corpus (->> corpus-dir
                     clojure.java.io/file
                     file-seq
                     (filter #(str/includes? % "blif"))
                     (map str)
                     (mapv (fn [x] `(genetic-representation ~x))))]
-    (println "Starting Fuzzing...")
+    (log "Starting Fuzzing...")
     (use-ramdisk (DISK-SIZE) (partial fuzz (keyword synth) synth-path yosys-path sby-path abc-path corpus))))
