@@ -9,12 +9,15 @@
 (defmacro CROSSOVER-PROBABILITY [] 0.01)
 
 (defn next-population [population]
-  (let [survivors (take (NUM-SURVIVORS) (shuffle population))]
+  (let [survivors (take (NUM-SURVIVORS) (sort-by #(->> % first -) population))]
     {:tested survivors
      :untested (concat (->> survivors
+                            (map second)
                             (random-sample (MUTATION-PROBABILITY))
                             (map add-mutation))
-                       (->> (cartesian-product survivors survivors)
+                       (->> survivors
+                            (map second)
+                            (#(cartesian-product % %))
                             (random-sample (CROSSOVER-PROBABILITY))
                             (map add-crossover)))}))
 
