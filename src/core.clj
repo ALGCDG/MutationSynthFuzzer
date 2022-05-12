@@ -120,7 +120,7 @@
   (log (format "Checking Sby path: %s ..." sby-path))
   (check-file-exists sby-path (format "Path to sby (%s) does not exist!" sby-path))
   ;; Check python3 available
-  (assert (->> (sh "command" "-v" "python3") :exit (= 0)) "Could not find python3 command, required for equivalence check.")
+  (assert (->> (sh "bash" "-c" "command -v python3") :exit (= 0)) "Could not find python3 command, required for equivalence check.")
   ;; Check abc-path
   (log (format "Checking ABC path: %s ..." abc-path))
   (check-file-exists abc-path (format "Path to abc (%s) does not exist!" abc-path))
