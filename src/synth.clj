@@ -30,10 +30,10 @@
                    output-verilog-file)
     (throw (Exception. (format "Incompatable synthesizer %s" synth)))))
 
-(defn run-synthesis [synth synth-path input-verilog-file output-verilog-file]
+(defn run-synthesis [synth synth-path timeout input-verilog-file output-verilog-file]
   (log (format "Synthesizing verilog file %s..." input-verilog-file))
   (let [synth-result (sh "bash" "-c" (format  "timeout %s %s"
-                                              (TIMEOUT)
+                                              (or timeout (TIMEOUT))
                                               (synth-command synth synth-path input-verilog-file output-verilog-file)))]
     (if (not= (synth-result :exit) 0)
       (throw (ex-info "Synthesis Failed" {:type :synth-fail :input-verilog (slurp input-verilog-file) :result synth-result}))))

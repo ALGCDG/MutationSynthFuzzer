@@ -23,6 +23,7 @@
                                                     (partial run-synthesis
                                                              (config :synth)
                                                              (config :synth-path)
+                                                             (config :timeout)
                                                              input-verilog-path
                                                              output-verilog-file))]
       (check-equivalence (config :sby-path)
