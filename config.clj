@@ -1,0 +1,9 @@
+{:synth :yosys
+ :synth-path "../yosys/yosys"
+ :yosys-path "/Users/archie/Desktop/yosys"
+ :corpus-dir "examples/"
+ :sby-path "../SymbiYosys/sbysrc/sby.py"
+ :abc-path "/Users/archie/yosys/yosys-abc"
+ :src-dir "/Users/archie/yosys/"
+ :python "python3.8"
+ :timeout 300}
