@@ -28,6 +28,7 @@
       (check-equivalence (config :sby-path)
                          (config :yosys-path)
                          (config :abc-path)
+                         (config :python)
                          (eval g)
                          tmpfile
                          input-verilog-path

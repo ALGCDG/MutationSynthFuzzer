@@ -27,12 +27,13 @@
    (str/join "\n" (map read-formal files))
    (str/join "\n" files)))
 
-(println (sby-template '("top.v " "other.v " "others.v ")))
+;;(println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [sby-path yosys-path abc-path tmpfile top-path pre-synth-path post-synth-path]
+(defn run-sby [sby-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path]
   (let [config-filepath (format "%s/equiv_check.sby" tmpfile)]
     (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
-    (sh "bash" "-c" (format "python3 %s --yosys %s --abc %s -t %s"
+    (sh "bash" "-c" (format "%s %s --yosys %s --abc %s -t %s"
+                            python-path
                             sby-path
                             yosys-path
                             abc-path
@@ -58,13 +59,13 @@
           name
           (str/join ", " (for [[sut-arg top-arg] params] (format ".%s (%s)" sut-arg top-arg)))))
 
-(println (module "top" '("x" "y")
-                 (input "x")
-                 (output "y")
-                 (instance "presynth" "left" "")
-                 (instance "postsynth" "right" "")
-                 (always "posedge" "clk"
-                         (vassert "x == y"))))
+;;(println (module "top" '("x" "y")
+;;                 (input "x")
+;;                 (output "y")
+;;                 (instance "presynth" "left" "")
+;;                 (instance "postsynth" "right" "")
+;;                 (always "posedge" "clk"
+;;                         (vassert "x == y"))))
 
 (defn assert-equivalent [[siga sigb]] (vassert (format "%s == %s" siga sigb)))
 
@@ -102,12 +103,12 @@
                          (map assert-equivalent)
                          (str/join "\n"))))))
 
-(println (top (genetic-representation "example.blif.old")))
+;;(println (top (genetic-representation "example.blif.old")))
 
-(defn check-equivalence [syb-path yosys-path abc-path g tmpfile pre-synth-path post-synth-path]
+(defn check-equivalence [syb-path yosys-path abc-path python-path g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
     (spit top-path (top g))
-    (let [proof-result (run-sby syb-path yosys-path abc-path tmpfile top-path pre-synth-path post-synth-path)]
+    (let [proof-result (run-sby syb-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path)]
       (sh "rm" top-path)
       (if (not= (:exit proof-result) 0)
         (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))
