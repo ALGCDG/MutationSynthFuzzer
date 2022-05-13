@@ -13,14 +13,25 @@
 
 (defmacro DISK-SIZE [] (int 200e6))  ;; 200 MB
 
-(defn test-genetic [synth synth-path yosys-path sby-path abc-path src-dir g tmpfile]
+(defn test-genetic [config g tmpfile]
   (log (format "Testing %s" g))
   (try
-    (let [input-verilog-path (->> g eval (genetic-to-verilog yosys-path tmpfile))
+    (let [input-verilog-path (->> g eval (genetic-to-verilog (config :yosys-path) tmpfile))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
-          [coverage synth-result] (measure-coverage src-dir tmpfile (partial run-synthesis synth synth-path input-verilog-path output-verilog-file))]
-      (check-equivalence sby-path yosys-path abc-path (eval g) tmpfile input-verilog-path output-verilog-file)
-      #_(collect-coverage)
+          [coverage synth-result] (measure-coverage (config :src-dir)
+                                                    tmpfile
+                                                    (partial run-synthesis
+                                                             (config :synth)
+                                                             (config :synth-path)
+                                                             input-verilog-path
+                                                             output-verilog-file))]
+      (check-equivalence (config :sby-path)
+                         (config :yosys-path)
+                         (config :abc-path)
+                         (eval g)
+                         tmpfile
+                         input-verilog-path
+                         output-verilog-file)
       (sh "rm" input-verilog-path)
       (sh "rm" output-verilog-file)
       [coverage g])
@@ -37,7 +48,7 @@
   (spit (format "state%d.clj" generation-count)
         population))
 
-(defn fuzz [synth synth-path yosys-path sby-path abc-path corpus src-dir tmpfile]
+(defn fuzz [config corpus tmpfile]
   (loop [current-population {:tested [] :untested corpus}
          generation-count 0
          shutdown-hook nil]
@@ -48,7 +59,7 @@
       (let [error-free-population (try
                                     (->> current-population
                                          :untested
-                                         (mapv #(test-genetic synth synth-path yosys-path sby-path abc-path src-dir % tmpfile))
+                                         (mapv #(test-genetic config % tmpfile))
                                          (filter identity))
                                     (catch Exception e
                                       (throw e)))]
@@ -79,7 +90,7 @@
 (defn check-yosys [filepath]
   (let [version (sh "bash" "-c" (format "%s --version" filepath))]
     (assert (= 0 (version :exit))
-            "Could not run --version command with yosys")
+            (format "Could not run --version command with yosys (%s)" filepath))
     (assert (re-matches #"(?s)Yosys\s.*" (version :out))
             (format "Executable does not identify as Yosys, outputs: %s" (version :out)))))
 
@@ -90,49 +101,51 @@
     (assert (re-matches #"(?s)UC\sBerkeley,\sABC\s.*" (version :out))
             (format "Executable does not identify as ABC, outputs: %s" (version :out)))))
 
-(defn -main [synth synth-path yosys-path corpus-dir sby-path abc-path src-dir & others]
+(defn -main [config-path]
+  (let [config (->> config-path slurp read-string)
+        [synth synth-path yosys-path corpus-dir sby-path abc-path src-dir] (map config [:synth :synth-path :yosys-path :corpus-dir :sby-path :abc-path :src-dir])]
   ;; Check provided arguments are valid
   ;; synth is a known synthesizer
-  (assert (#{:yosys} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
+    (assert (#{:yosys} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
   ;; synth-path is a valid filepath to a executable
-  (log (format "Checking Synth Under Test path: %s ..." synth-path))
-  (check-file-exists synth-path
-                     (format "Path to Synth Under Test (%s) is not a valid filepath!" synth-path))
-  (check-file-executable synth-path
-                         (format "Path to Synth Under Test (%s) is not an executable!" synth-path))
+    (log (format "Checking Synth Under Test path: %s ..." synth-path))
+    (check-file-exists synth-path
+                       (format "Path to Synth Under Test (%s) is not a valid filepath!" synth-path))
+    (check-file-executable synth-path
+                           (format "Path to Synth Under Test (%s) is not an executable!" synth-path))
   ;; TODO: Check instrumented and can collect coverage
   ;; yosys-path is a valid filepath to a executable (maybe verify that it really is yosys and that it is correctly insturmented)
-  (log (format "Checking Yosys path: %s ..." synth-path))
-  (check-file-exists yosys-path
-                     (format "Path to Yosys (%s) is not a valid filepath!" yosys-path))
-  (check-file-executable yosys-path
-                         (format "Path to Yosys (%s) is not an executable!" yosys-path))
-  (check-yosys yosys-path)
+    (log (format "Checking Yosys path: %s ..." synth-path))
+    (check-file-exists yosys-path
+                       (format "Path to Yosys (%s) is not a valid filepath!" yosys-path))
+    (check-file-executable yosys-path
+                           (format "Path to Yosys (%s) is not an executable!" yosys-path))
+    (check-yosys yosys-path)
   ;; corpus-dir, check that it is a valid filepath to a directory (maybe that it contains blif files and that each blif contians one module)
-  (log (format "Checking Corpus: %s ..." corpus-dir))
-  (check-file-exists corpus-dir
-                     (format "Corpus directory (%s) does not exist!" corpus-dir))
-  (check-directory corpus-dir
-                   (format "Corpus directory path (%s) is not a directory!" corpus-dir))
-  (check-contians-blifs corpus-dir)
-  #_(check-blifs-contain-one-module)
+    (log (format "Checking Corpus: %s ..." corpus-dir))
+    (check-file-exists corpus-dir
+                       (format "Corpus directory (%s) does not exist!" corpus-dir))
+    (check-directory corpus-dir
+                     (format "Corpus directory path (%s) is not a directory!" corpus-dir))
+    (check-contians-blifs corpus-dir)
+    #_(check-blifs-contain-one-module)
   ;; Check sby-path
-  (log (format "Checking Sby path: %s ..." sby-path))
-  (check-file-exists sby-path (format "Path to sby (%s) does not exist!" sby-path))
+    (log (format "Checking Sby path: %s ..." sby-path))
+    (check-file-exists sby-path (format "Path to sby (%s) does not exist!" sby-path))
   ;; Check python3 available
-  (assert (->> (sh "bash" "-c" "command -v python3") :exit (= 0)) "Could not find python3 command, required for equivalence check.")
+    (assert (->> (sh "bash" "-c" "command -v python3") :exit (= 0)) "Could not find python3 command, required for equivalence check.")
   ;; Check abc-path
-  (log (format "Checking ABC path: %s ..." abc-path))
-  (check-file-exists abc-path (format "Path to abc (%s) does not exist!" abc-path))
-  (check-file-executable abc-path
-                         (format "Path to abc (%s) is not an executable!" abc-path))
-  (check-abc abc-path)
-  (log (format "Reading Corpus: %s..." corpus-dir))
-  (let [corpus (->> corpus-dir
-                    clojure.java.io/file
-                    file-seq
-                    (filter #(str/includes? % "blif"))
-                    (map str)
-                    (mapv (fn [x] `(genetic-representation ~x))))]
-    (log "Starting Fuzzing...")
-    (use-ramdisk (DISK-SIZE) (partial fuzz (keyword synth) synth-path yosys-path sby-path abc-path corpus src-dir))))
+    (log (format "Checking ABC path: %s ..." abc-path))
+    (check-file-exists abc-path (format "Path to abc (%s) does not exist!" abc-path))
+    (check-file-executable abc-path
+                           (format "Path to abc (%s) is not an executable!" abc-path))
+    (check-abc abc-path)
+    (log (format "Reading Corpus: %s..." corpus-dir))
+    (let [corpus (->> corpus-dir
+                      clojure.java.io/file
+                      file-seq
+                      (filter #(str/includes? % "blif"))
+                      (map str)
+                      (mapv (fn [x] `(genetic-representation ~x))))]
+      (log "Starting Fuzzing...")
+      (use-ramdisk (DISK-SIZE) (partial fuzz config corpus)))))
