@@ -36,5 +36,9 @@
                                               (or timeout (TIMEOUT))
                                               (synth-command synth synth-path input-verilog-file output-verilog-file)))]
     (if (not= (synth-result :exit) 0)
-      (throw (ex-info "Synthesis Failed" {:type :synth-fail :input-verilog (slurp input-verilog-file) :result synth-result}))))
-  (log (format "Successfully Synthesized verilog file %s, output verilog availabe: %s!" input-verilog-file output-verilog-file)))
+      (if (and (= (synth-result :exit) 124)
+               (= (synth-result :err) ""))
+        (log ("Synthesis timed out after %ss" timeout))
+
+        (throw (ex-info "Synthesis Failed" {:type :synth-fail :input-verilog (slurp input-verilog-file) :result synth-result}))))
+    (log (format "Successfully Synthesized verilog file %s, output verilog availabe: %s!" input-verilog-file output-verilog-file))))
