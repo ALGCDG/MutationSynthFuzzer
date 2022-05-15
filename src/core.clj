@@ -26,10 +26,7 @@
                                                              (config :timeout)
                                                              input-verilog-path
                                                              output-verilog-file))]
-      (check-equivalence (config :sby-path)
-                         (config :yosys-path)
-                         (config :abc-path)
-                         (config :python)
+      (check-equivalence config
                          (eval g)
                          tmpfile
                          input-verilog-path

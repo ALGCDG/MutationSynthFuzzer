@@ -29,14 +29,15 @@
 
 ;;(println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [sby-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path]
+(defn run-sby [config tmpfile top-path pre-synth-path post-synth-path]
   (let [config-filepath (format "%s/equiv_check.sby" tmpfile)]
     (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
-    (sh "bash" "-c" (format "%s %s --yosys %s --abc %s -t %s"
-                            python-path
-                            sby-path
-                            yosys-path
-                            abc-path
+    (sh "bash" "-c" (format "%s %s --yosys %s --abc %s %s -f %s"
+                            (config :python)
+                            (config :sby-path)
+                            (config :yosys-path)
+                            (config :abc-path)
+                            (if (config :smsmtbmc-path) (format "--smtbmc %s" (config :smsmtbmc-path)) "")
                             config-filepath))))
 
 ;; Verilog Top File Templating
@@ -105,10 +106,10 @@
 
 ;;(println (top (genetic-representation "example.blif.old")))
 
-(defn check-equivalence [syb-path yosys-path abc-path python-path g tmpfile pre-synth-path post-synth-path]
+(defn check-equivalence [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
     (spit top-path (top g))
-    (let [proof-result (run-sby syb-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path)]
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path)]
       (sh "rm" top-path)
       (if (not= (:exit proof-result) 0)
         (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))
