@@ -42,7 +42,8 @@
         :synth-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
         :equiv-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
         :convert-fail (log (format "Failed to convert %s to verilog" g))
-        (log (format "Test Failed: %s, %s" g e))))))
+        (log (format "Test Failed: %s, %s" g e))))
+    (finally (sh "rm" "-rf" "*" :dir tmpfile))))
 
 (defn dump-genetic-state [population generation-count]
   (log (format "Shutting down, dumping current genetic state of generation %d..."
