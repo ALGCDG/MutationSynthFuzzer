@@ -30,11 +30,13 @@
 ;;(println (sby-template '("top.v " "other.v " "others.v ")))
 
 (defmacro PROOF-NAME [] "equiv_check")
+(defmacro PROOF-TIMEOUT [] 3600)  ;; Default proof timeout, 1 hour
 
 (defn run-sby [config tmpfile top-path pre-synth-path post-synth-path full-trace]
   (let [config-filepath (format "%s/%s_%s.sby" tmpfile (or (config :id) "") (PROOF-NAME))]
     (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path] full-trace))
-    (let [sby-command (format "%s %s --yosys %s --abc %s %s -f %s"
+    (let [sby-command (format "timeout %s %s %s --yosys %s --abc %s %s -f %s"
+                              (or (config :proof-timeout) (PROOF-TIMEOUT))
                               (config :python)
                               (config :sby-path)
                               (config :yosys-path)
@@ -42,7 +44,8 @@
                               (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
                               config-filepath)]
       (println sby-command)
-      (sh "bash" "-c" (format "%s %s --yosys %s --abc %s %s -f %s"
+      (sh "bash" "-c" (format "timeout %s %s %s --yosys %s --abc %s %s -f %s"
+                              (or (config :proof-timeout) (PROOF-TIMEOUT))
                               (config :python)
                               (config :sby-path)
                               (config :yosys-path)
@@ -123,7 +126,10 @@
     (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path nil)]
       (sh "rm" top-path)
       (if (not= (:exit proof-result) 0)
-        (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))
+        (if (and (= (:exit proof-result) 124)
+                 (empty? (:err proof-result)))
+          (log "Proof timed out")
+          (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result})))))))
 
 (defn simulate [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
