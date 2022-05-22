@@ -11,33 +11,48 @@
 
 (defn read-formal [file] (format "read -formal %s" file))
 
-(defn sby-template [files]
+(defn sby-template [files full-trace]
   (format
-   (str/join "\n" '("[options]"
-                    "multiclock on"
-                    "mode prove"
-                    "aigsmt none"
-                    "[engines]"
-                    "abc pdr"
-                    "[script]"
-                    "%s"
-                    "prep -top top"
-                    "[files]"
-                    "%s"))
+   (str/join "\n" ["[options]"
+                   "multiclock on"
+                   "mode prove"
+                   (if full-trace "" "aigsmt none")
+                   "[engines]"
+                   "abc pdr"
+                   "[script]"
+                   "%s"
+                   "prep -top top"
+                   "[files]"
+                   "%s"])
    (str/join "\n" (map read-formal files))
    (str/join "\n" files)))
 
 ;;(println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [sby-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path]
-  (let [config-filepath (format "%s/equiv_check.sby" tmpfile)]
-    (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
-    (sh "bash" "-c" (format "%s %s --yosys %s --abc %s -t %s"
-                            python-path
-                            sby-path
-                            yosys-path
-                            abc-path
-                            config-filepath))))
+(defmacro PROOF-NAME [] "equiv_check")
+(defmacro PROOF-TIMEOUT [] 3600)  ;; Default proof timeout, 1 hour
+
+(defn run-sby [config tmpfile top-path pre-synth-path post-synth-path full-trace]
+  (let [config-filepath (format "%s/%s_%s.sby" tmpfile (or (config :id) "") (PROOF-NAME))]
+    (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path] full-trace))
+    (let [sby-command (format "timeout %s %s %s --yosys %s --abc %s %s -f %s"
+                              (or (config :proof-timeout) (PROOF-TIMEOUT))
+                              (config :python)
+                              (config :sby-path)
+                              (config :yosys-path)
+                              (config :abc-path)
+                              (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
+                              config-filepath)]
+      (println sby-command)
+      (sh "bash" "-c" (format "timeout %s %s %s --yosys %s --abc %s %s -f %s"
+                              (or (config :proof-timeout) (PROOF-TIMEOUT))
+                              (config :python)
+                              (config :sby-path)
+                              (config :yosys-path)
+                              (config :abc-path)
+                              (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
+                              config-filepath)
+          :dir tmpfile))))
 
 ;; Verilog Top File Templating
 
@@ -105,10 +120,27 @@
 
 ;;(println (top (genetic-representation "example.blif.old")))
 
-(defn check-equivalence [syb-path yosys-path abc-path python-path g tmpfile pre-synth-path post-synth-path]
+(defn check-equivalence [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
     (spit top-path (top g))
-    (let [proof-result (run-sby syb-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path)]
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path nil)]
       (sh "rm" top-path)
       (if (not= (:exit proof-result) 0)
-        (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))
+        (if (and (= (:exit proof-result) 124)
+                 (empty? (:err proof-result)))
+          (log "Proof timed out")
+          (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result})))))))
+
+(defn simulate [config g tmpfile pre-synth-path post-synth-path]
+  (let [top-path (format "%s/top.v" tmpfile)]
+    (spit top-path (top g))
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path true)]
+      (if (re-find #"trace_tb.v" (proof-result :out))
+        (let [counter-eg-tb-path (format "%s/%s/engine_0/trace_tb.v" tmpfile (PROOF-NAME))]
+          (sh "bash" "-c" (format "iverilog -g2012 %s %s %s %s"
+                                  top-path
+                                  pre-synth-path
+                                  post-synth-path
+                                  counter-eg-tb-path))
+          (sh "bash" "-c" "vvp a.out"))
+        (println "Couldn't find trace_tb.v" (proof-result :out))))))
