@@ -3,6 +3,7 @@
   (:require [clojure.java.shell :refer [sh]])
   (:require [blif.compose :refer [create-var GENERATED-MODULE-NAME]])
   (:require [synth :refer [SYNTHED-MODULE-NAME]])
+  (:require [util :refer [log]])
   (:require [genetic.representation :refer [genetic-representation]]))
 
 ;; Equivalence checking using Sby
