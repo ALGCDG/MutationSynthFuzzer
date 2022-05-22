@@ -32,7 +32,7 @@
 (defmacro PROOF-NAME [] "equiv_check")
 
 (defn run-sby [config tmpfile top-path pre-synth-path post-synth-path full-trace]
-  (let [config-filepath (format "%s/%s.sby" tmpfile (PROOF-NAME))]
+  (let [config-filepath (format "%s/%s_%s.sby" tmpfile (or (config :id) "") (PROOF-NAME))]
     (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path] full-trace))
     (let [sby-command (format "%s %s --yosys %s --abc %s %s -f %s"
                               (config :python)
@@ -48,7 +48,8 @@
                               (config :yosys-path)
                               (config :abc-path)
                               (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
-                              config-filepath)))))
+                              config-filepath)
+          :dir tmpfile))))
 
 ;; Verilog Top File Templating
 

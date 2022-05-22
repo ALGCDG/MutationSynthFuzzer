@@ -131,9 +131,22 @@
         (sh "bash" "-c" "vvp sim"))))
 
 (defn simulate-bug [config bug]
-  (spit "sut_post.v" (->> bug :error :post-synth-verilog))
-  (spit "sut_pre.v" (->> bug :error :pre-synth-verilog))
-  (simulate config (->> bug :input eval) "." "sut_pre.v" "sut_post.v"))
+  (let [sim-dir (->> (format "bugs/%X_sim" (->> bug :input hash))
+                     java.io.File.
+                     .getAbsolutePath
+                     str)
+        post-path "sut_post.v"
+        pre-path "sut_pre.v"]
+    #_(.mkdir (java.io.File. sim-dir))
+    (spit post-path (->> bug :error :post-synth-verilog))
+    (spit pre-path (->> bug :error :pre-synth-verilog))
+    (let [sim-result (simulate (assoc config :id (->> bug :input hash (format "%X"))) (->> bug :input eval) "." pre-path post-path)]
+      #_(if sim-result
+        (do
+         (spit (format "%s/log.out.txt" sim-dir) (sim-result :out))
+         (spit (format "%s/log.err.txt" sim-dir) (sim-result :err))
+         (spit (format "%s/exit.txt" sim-dir) (sim-result :exit))))
+      sim-result)))
 
 (defn -main []
   (let [grouped-bugs (classify-bugs (read-bugs "bugs"))]
@@ -142,12 +155,13 @@
   (let [simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"}
                                  (->> "config.clj" slurp read-string))]
     (->> "bugs"
-       read-bugs
-       classify-bugs
-       :equiv-fail
-       (mapv (fn [bug]
-               [bug
-                (simulate-bug simulation-config bug)]))
-       (filter (fn [[bug result]] (->> result :out empty? not)))
-       println)))
+         read-bugs
+         classify-bugs
+         :equiv-fail
+         (mapv (fn [bug]
+                 [bug
+                  (simulate-bug simulation-config bug)]))
+         (filter (fn [[bug result]] (->> result :out empty? not)))
+         (mapv (fn [[bug result]] (->> bug :input hash)))
+         println)))
 
