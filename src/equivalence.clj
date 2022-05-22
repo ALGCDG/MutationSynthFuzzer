@@ -11,34 +11,44 @@
 
 (defn read-formal [file] (format "read -formal %s" file))
 
-(defn sby-template [files]
+(defn sby-template [files full-trace]
   (format
-   (str/join "\n" '("[options]"
-                    "multiclock on"
-                    "mode prove"
-                    "aigsmt none"
-                    "[engines]"
-                    "abc pdr"
-                    "[script]"
-                    "%s"
-                    "prep -top top"
-                    "[files]"
-                    "%s"))
+   (str/join "\n" ["[options]"
+                   "multiclock on"
+                   "mode prove"
+                   (if full-trace "" "aigsmt none")
+                   "[engines]"
+                   "abc pdr"
+                   "[script]"
+                   "%s"
+                   "prep -top top"
+                   "[files]"
+                   "%s"])
    (str/join "\n" (map read-formal files))
    (str/join "\n" files)))
 
 ;;(println (sby-template '("top.v " "other.v " "others.v ")))
 
-(defn run-sby [config tmpfile top-path pre-synth-path post-synth-path]
-  (let [config-filepath (format "%s/equiv_check.sby" tmpfile)]
-    (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path]))
-    (sh "bash" "-c" (format "%s %s --yosys %s --abc %s %s -f %s"
-                            (config :python)
-                            (config :sby-path)
-                            (config :yosys-path)
-                            (config :abc-path)
-                            (if (config :smsmtbmc-path) (format "--smtbmc %s" (config :smsmtbmc-path)) "")
-                            config-filepath))))
+(defmacro PROOF-NAME [] "equiv_check")
+
+(defn run-sby [config tmpfile top-path pre-synth-path post-synth-path full-trace]
+  (let [config-filepath (format "%s/%s.sby" tmpfile (PROOF-NAME))]
+    (spit config-filepath (sby-template [top-path pre-synth-path post-synth-path] full-trace))
+    (let [sby-command (format "%s %s --yosys %s --abc %s %s -f %s"
+                              (config :python)
+                              (config :sby-path)
+                              (config :yosys-path)
+                              (config :abc-path)
+                              (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
+                              config-filepath)]
+      (println sby-command)
+      (sh "bash" "-c" (format "%s %s --yosys %s --abc %s %s -f %s"
+                              (config :python)
+                              (config :sby-path)
+                              (config :yosys-path)
+                              (config :abc-path)
+                              (if (config :smtbmc-path) (format "--smtbmc %s" (config :smtbmc-path)) "")
+                              config-filepath)))))
 
 ;; Verilog Top File Templating
 
@@ -109,7 +119,21 @@
 (defn check-equivalence [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
     (spit top-path (top g))
-    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path)]
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path nil)]
       (sh "rm" top-path)
       (if (not= (:exit proof-result) 0)
         (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result}))))))
+
+(defn simulate [config g tmpfile pre-synth-path post-synth-path]
+  (let [top-path (format "%s/top.v" tmpfile)]
+    (spit top-path (top g))
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path true)]
+      (if (re-find #"trace_tb.v" (proof-result :out))
+        (let [counter-eg-tb-path (format "%s/%s/engine_0/trace_tb.v" tmpfile (PROOF-NAME))]
+          (sh "bash" "-c" (format "iverilog -g2012 %s %s %s %s"
+                                  top-path
+                                  pre-synth-path
+                                  post-synth-path
+                                  counter-eg-tb-path))
+          (sh "bash" "-c" "vvp a.out"))
+        (println "Couldn't find trace_tb.v" (proof-result :out))))))
