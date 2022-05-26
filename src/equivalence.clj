@@ -83,7 +83,10 @@
 ;;                 (always "posedge" "clk"
 ;;                         (vassert "x == y"))))
 
-(defn assert-equivalent [[siga sigb]] (vassert (format "%s == %s" siga sigb)))
+(defn assert-equivalent [[sig-pre sig-post]] (vassert (format "$isunknown(%s) || (%s == %s)"
+                                                              sig-pre
+                                                              sig-pre
+                                                              sig-post)))
 
 (defmacro TOP-CLK [] "clk")
 
