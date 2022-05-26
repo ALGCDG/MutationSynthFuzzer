@@ -7,7 +7,7 @@
         .nextInt
         Math/abs
         (mod ,,, (count col))
-        col)))
+        ((into [] col)))))
 
 (defn pure-sample [seed probability col]
   (->> seed

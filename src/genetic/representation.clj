@@ -18,7 +18,7 @@
 (defn genetic-representation [f]
   (let [[nodes ports] (parse (or (first (get-modules (slurp f))) ""))]
     (let [edges (ports-to-edges ports)]
-      [nodes edges])))
+      [nodes (distinct edges)])))
 
 (s/def ::keyword #{:names :input :outputs :latch :constant})
 (s/def :node/type ::keyword)
