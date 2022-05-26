@@ -49,7 +49,10 @@
         population))
 
 (defn fuzz [config corpus tmpfile]
-  (loop [current-population {:tested [] :untested corpus}
+  (loop [current-population (if (config :resume)
+                              (do (log (format "Resuming fuzzing from state %s" (config :resume)))
+                                  (->> config :resume slurp read-string))
+                              {:tested [] :untested corpus})
          generation-count 0
          shutdown-hook nil]
     (log (format "Fuzzing generation %d" generation-count))
