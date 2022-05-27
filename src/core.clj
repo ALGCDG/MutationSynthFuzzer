@@ -67,8 +67,8 @@
                                     (catch Exception e
                                       (throw e)))]
         (log "Developing next generation...")
-        (recur (next-population (concat (:tested current-population)
-                                        error-free-population))
+        (recur (next-population config (concat (:tested current-population)
+                                               error-free-population))
                (+ 1 generation-count)
                new-shutdown-hook)))))
 

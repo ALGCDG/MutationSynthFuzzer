@@ -4,39 +4,23 @@
   (:require [genetic.crossover :refer [crossover]])
   (:require [genetic.tree :refer [add-mutation add-crossover]]))
 
+;; Default selection parameters
 (defmacro NUM-SURVIVORS [] 10)
 (defmacro MUTATION-PROBABILITY [] 0.5)
-(defmacro CROSSOVER-PROBABILITY [] 0.01)
+(defmacro CROSSOVER-PROBABILITY [] 0.05)
 
-(defn next-population [population]
-  (let [survivors (take (NUM-SURVIVORS) (sort-by #(->> % first -) population))]
+(defn next-population [config population]
+  (let [survivors (take (or (config :num-survivors) (NUM-SURVIVORS)) (sort-by #(->> % first -) population))]
     {:tested survivors
      :untested (concat (->> survivors
                             (map second)
-                            (random-sample (MUTATION-PROBABILITY))
+                            (random-sample (or (config :mutation-probability)
+                                               (MUTATION-PROBABILITY)))
                             (map add-mutation))
                        (->> survivors
                             (map second)
                             (#(cartesian-product % %))
-                            (random-sample (CROSSOVER-PROBABILITY))
+                            (random-sample (/ (or (config :crossover-probability)
+                                                  (CROSSOVER-PROBABILITY))
+                                              (count survivors)))  ;; Normalising by number of survivors to counter-act cartesian product
                             (map add-crossover)))}))
-
-(defn calculate-coverage [coverage-json] 0)  ;; PLACEHOLER
-
-;;(defn run-synthesis [g]
-;;  (let [generated-filename (format "%s.blif" (hash g))]
-;;    (sh "rm" "*.gcda")  ;; CLEAN COVERAGE DATA (DELETE EXISTING FILES) TODO FIX 
-;;    (spit generated-filename (generate-blif g))
-;;    (spit generated-filename (generate-blif g))
-;;    (sh "bash" "-c" (format  "timeout %s %s %s %s"
-;;                             (TIMEOUT)
-;;                             (SYNTH-PATH)
-;;                             (SYNTH-ARGS)
-;;                             generated-filename))
-;;    (sh "bash" "-c" (format  "gcov --json-format -t %s" (COVERAGE-FILE)))  ;; Convert coverage file to JSON and read 
-;;    (calculate-coverage (json/read-str (slurp "coverage.txt")))))
-;;
-;;(defn get-coverage [] 0)  ;; PLACEHOLDER
-;;
-;;(defn select [genes coverage]
-;;  (take (NUM-SURVIVORS) (sort-by get-coverage genes)))
