@@ -130,6 +130,71 @@
             index-b
             (assoc (dissoc edge-b source-index-b) source-index-a :output))]))
 
+(defn add-input [seed [nodes edges]]
+  (let [[edge-seed sink-seed] (generate-seeds seed 2)
+        [index edge] (pure-rand-nth edge-seed
+                                    (filter (fn [[index edge]]
+                                              (->> edge
+                                                   vals
+                                                   (filter #(not= % :output))
+                                                   count
+                                                   (< 1)))
+                                            (enumerate edges)))
+        [stolen-sink-index stolen-sink-port] (pure-rand-nth sink-seed
+                                                            (filter (fn [[index port]]
+                                                                      (not= port :output))
+                                                                    edge))]
+    [(conj nodes {:type :input})
+     (if (and index (integer? index))
+       (conj (assoc (into [] edges)
+                    index
+                    (dissoc edge stolen-sink-index))
+             {(count nodes) :output stolen-sink-index stolen-sink-port})
+       (conj edges {(count nodes) :output}))]))
+
+(defn edge-steal-sink [seed [nodes edges]]
+  (let [[target-seed theif-seed sink-seed] (generate-seeds seed 3)
+        [theif-index theif-edge] (pure-rand-nth theif-seed (enumerate edges))
+        [target-index target-edge] (pure-rand-nth target-seed
+                                                  (filter (fn [[index edge]]
+                                                            (->> edge
+                                                                 vals
+                                                                 (filter #(not= % :output))
+                                                                 count
+                                                                 (< 1)))
+                                                          (enumerate edges)))
+        [stolen-sink-index stolen-sink-port] (pure-rand-nth sink-seed
+                                                            (filter (fn [[index port]]
+                                                                      (not= port :output))
+                                                                    target-edge))]
+    [nodes
+     (assoc (into [] edges)
+            theif-index
+            (assoc theif-edge stolen-sink-index stolen-sink-port) target-index
+            (dissoc target-edge stolen-sink-index))]))
+
+(defn add-constant [seed [nodes edges]]
+  (let [[edge-seed sink-seed value-seed] (generate-seeds seed 3)
+        [index edge] (pure-rand-nth edge-seed
+                                    (filter (fn [[index edge]]
+                                              (->> edge
+                                                   vals
+                                                   (filter #(not= % :output))
+                                                   count
+                                                   (< 1)))
+                                            (enumerate edges)))
+        [stolen-sink-index stolen-sink-port] (pure-rand-nth sink-seed
+                                                            (filter (fn [[index port]]
+                                                                      (not= port :output))
+                                                                    edge))]
+    [(conj nodes {:type :constant :value (pure-rand-nth value-seed [:true :false])})
+     (if (and index (integer? index))
+       (conj (assoc (into [] edges)
+                    index
+                    (dissoc edge stolen-sink-index))
+             {(count nodes) :output stolen-sink-index stolen-sink-port})
+       (conj edges {(count nodes) :output}))]))
+
 (defmacro MUTATIONS [] [change-latch-trigger
                         change-names-remove-clause
                         change-names-add-clause
@@ -145,7 +210,10 @@
                                     `change-names-add-clause
                                     `change-names-flip-term
                                     `add-output
-                                    `edge-switch-source]))
+                                    `add-input
+                                    `add-constant
+                                    `edge-switch-source
+                                    `edge-steal-sink]))
 
 (defmacro MUTATIONS-BY-TYPE [] '{:latch [change-latch-trigger
                                          change-latch-initial]
