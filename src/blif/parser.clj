@@ -43,7 +43,7 @@
           [] [(conj nodes {:type :constant :value :false}) (conj edges {output :output})]
           ["1"] [(conj nodes {:type :constant :value :true}) (conj edges {output :output})]
           (let [inputs (butlast args)
-                cnf (map #(str/split % #"\s+") table-rows)]
+                cnf (map #(mapv str (str/replace % #"\s+" "")) table-rows)]
             (let [input-map (->> (map-indexed (fn [index variable] {variable (input-keyword index)}) inputs)
                                  (apply merge))]
               [(conj nodes {:type :names :num-inputs (count inputs) :table cnf})
