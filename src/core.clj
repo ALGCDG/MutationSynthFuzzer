@@ -18,7 +18,7 @@
   (try
     (let [input-verilog-path (->> g eval (genetic-to-verilog (config :yosys-path) tmpfile))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
-          [coverage synth-result] (measure-coverage (config :src-dir)
+          [coverage synth-result] (measure-coverage config
                                                     tmpfile
                                                     (partial run-synthesis
                                                              (config :synth)
@@ -151,4 +151,11 @@
                       (map str)
                       (mapv (fn [x] `(genetic-representation ~x))))]
       (log "Starting Fuzzing...")
-      (use-ramdisk (DISK-SIZE) (partial fuzz config corpus)))))
+      (use-ramdisk (DISK-SIZE)
+                   (partial fuzz
+                            (if (config :bounty-file)
+                              (do
+                                (log (format "Reading bounty file %s..." (config :bounty-file)))
+                                (assoc config :bounties (->> config :bounty-file slurp read-string)))
+                              config)
+                            corpus)))))
