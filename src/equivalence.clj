@@ -96,15 +96,15 @@
                         (filter #(= (:type %) :input))
                         (map :index)
                         (map #(create-var % :output edges))
-                        (map #(format "\\%s" %)))
+                        (map #(format "%s" %)))
         sut-outputs (->> indexed-nodes
                          (filter #(= (:type %) :output))
                          (map :index)
                          (map #(create-var % :input edges))
-                         (map #(format "\\%s" %)))
+                         (map #(format "%s" %)))
         top-inputs (take (count sut-inputs) (map #(format "x_%s" %) (range)))
-        top-pre-outputs (take (count sut-outputs) (map #(format "y_pre_%s" %) (range)))
-        top-post-outputs (take (count sut-outputs) (map #(format "y_post_%s" %) (range)))]
+        top-pre-outputs (distinct (map #(format "y_pre_%s" %) sut-outputs))
+        top-post-outputs (distinct (map #(format "y_post_%s" %) sut-outputs))]
     (module "top" (concat [(TOP-CLK)] top-inputs top-pre-outputs top-post-outputs)
             (input (TOP-CLK))
             (str/join "\n" (map input top-inputs))
@@ -140,11 +140,12 @@
     (spit top-path (top g))
     (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path true)]
       (if (re-find #"trace_tb.v" (proof-result :out))
-        (let [counter-eg-tb-path (format "%s/%s/engine_0/trace_tb.v" tmpfile (PROOF-NAME))]
-          (sh "bash" "-c" (format "iverilog -g2012 %s %s %s %s"
-                                  top-path
-                                  pre-synth-path
-                                  post-synth-path
-                                  counter-eg-tb-path))
-          (sh "bash" "-c" "vvp a.out"))
+        (let [counter-eg-tb-path (format "%s/%s_%s/engine_0/trace_tb.v" tmpfile (or (config :id) "") (PROOF-NAME))
+              sim-compile-result (sh "bash" "-c" (format "iverilog -g2012 %s %s %s %s"
+                                                         top-path
+                                                         pre-synth-path
+                                                         post-synth-path
+                                                         counter-eg-tb-path))
+              sim-run-result (sh "bash" "-c" "vvp a.out")]
+          {:sim-run sim-run-result :sim-compile sim-compile-result})
         (println "Couldn't find trace_tb.v" (proof-result :out))))))
