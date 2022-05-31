@@ -29,7 +29,7 @@
       [(assoc (into [] nodes) modified-index new-node) edges])))
 
 (defn change-names-flip-term [seed [nodes edges]]
-  (let [[node-seed row-seed symbol-seed] (generate-seeds seed 3)
+  (let [[node-seed row-seed symbol-seed char-seed] (generate-seeds seed 4)
         indexed-names-nodes (filter (fn [[index node]] (= (get node :type) :names))
                                     (enumerate nodes))
         [modified-index node] (pure-rand-nth node-seed indexed-names-nodes)
@@ -40,13 +40,14 @@
                          target-row-index
                          (assoc target-row
                                 target-symbol-index
-                                (set/difference (set (CNF-SYMBOLS)) #{target-symbol})))
+                                (pure-rand-nth char-seed (set/difference (set (CNF-SYMBOLS)) #{target-symbol}))))
         new-node (assoc node :table new-table)]
     [(assoc (into [] nodes) modified-index new-node) edges]))
 
 (defn change-names-remove-clause [seed [nodes edges]]
   (let [[modified-index node] (rand-nodetype seed nodes :names)]
     (let [original-table (get node :table)]
+      (if (not (> 0 (count original-table))) (throw (ex-info ".names must have at least one row to avoid unknowns." {})))
       (let [new-table (rest (shuffle original-table))]
         (let [new-node (assoc node :table new-table)]
           [(assoc (into [] nodes) modified-index new-node) edges])))))
@@ -122,6 +123,18 @@
         [index-b edge-b] (pure-rand-nth seed-b (enumerate edges))
         source-index-a (->> edge-a set/map-invert :output)
         source-index-b (->> edge-b set/map-invert :output)]
+    (if (edge-a source-index-b) (throw (ex-info (format "Could not move %d:%s because receiving edge already contains %d:%s, possible loop"
+                                                 source-index-b
+                                                 :output
+                                                 source-index-b
+                                                 (edge-a source-index-b))
+                                                {})))
+    (if (edge-b source-index-a) (throw (ex-info (format "Could not move %d:%s because receiving edge already contains %d:%s, possible loop"
+                                                  source-index-a
+                                                  :output
+                                                  source-index-a
+                                                  (edge-b source-index-a))
+                                                {})))
     [nodes
      (assoc (into [] edges)
             index-a
@@ -166,10 +179,25 @@
                                                             (filter (fn [[index port]]
                                                                       (not= port :output))
                                                                     target-edge))]
+    (if (not (or (not (theif-edge stolen-sink-index))
+                (not= (theif-edge stolen-sink-index) :output)))
+            (throw (ex-info (format "Loop detected when stealing %d:%s (conflicts with existing output from node %d)."
+                    stolen-sink-index
+                    stolen-sink-port
+                    stolen-sink-index)
+                            {})))
+    (if (theif-edge stolen-sink-index)
+            (throw (ex-info (format "Stealing %d:%s would overwrite existing %d:%s in theif edge."
+                    stolen-sink-index
+                    stolen-sink-port
+                    stolen-sink-index
+                    (theif-edge stolen-sink-index))
+                            {})))
     [nodes
      (assoc (into [] edges)
             theif-index
-            (assoc theif-edge stolen-sink-index stolen-sink-port) target-index
+            (assoc theif-edge stolen-sink-index stolen-sink-port)
+            target-index
             (dissoc target-edge stolen-sink-index))]))
 
 (defn add-constant [seed [nodes edges]]
