@@ -2,7 +2,7 @@
   (:require [clojure.string :as str])
   (:require [util :refer [input-keyword]]))
 
-(defmacro MISSING-EDGE [] :missing_edge)
+(defmacro MISSING-EDGE [] "missing_edge")
 
 (defmacro GENERATED-MODULE-NAME [] "presynth")
 
@@ -22,7 +22,9 @@
            (.contains (keys edge) index)
            (= (get edge index) port)))]
     (let [edge (filter check edges)]
-      (edge-to-var (first edge)))))
+      (if (first edge)
+        (edge-to-var (first edge))
+        (MISSING-EDGE)))))
 
 (defn generate-input [node index edges]
   (format ".inputs %s" (create-var index :output edges)))
