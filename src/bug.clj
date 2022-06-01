@@ -11,72 +11,8 @@
 (defn recreate-blif [bug]
   (->> bug :input eval generate-blif))
 
-(->> (slurp "EF560692.bug.log") println)
-
-(->> (slurp "EF560692.bug.log") read-string recreate-blif println)
-
-#_(defn rerun [synth synth-path yosys-path sby-path abc-path bug]
-    (try
-      (->> bug
-           :input
-           (fn [x] (run-test synth synth-path yosys-path sby-path abc-path x ".")))
-      (catch Exception e e)))
-
-(->> (slurp "bugs/FE0488F3.bug.log") read-string :error :pre-synth-verilog (spit "bug_pre.v"))
-(->> (slurp "bugs/FE0488F3.bug.log") read-string :error :post-synth-verilog (spit "bug_post.v"))
-
-(->> (slurp "bugs/FE0488F3.bug.log") read-string :error :proof :out (spit "bug_proof.txt"))
-
-;;(->> (slurp "bugs/FE0488F3.bug.log") read-string :input (#(clojure.pprint/write % :dispatch clojure.pprint/code-dispatch)))
-
 (defn tree-bug [bug]
   (-> bug :input (pp/write ,,, :dispatch pp/code-dispatch)))
-
-(->> (slurp "bugs/FE0488F3.bug.log") read-string tree-bug)
-
-#_(->> (slurp "bugs/FE0488F3.bug.log") read-string (rerun :yosys "../yosys/yosys" "/Users/archie/yosys/yosys" "../Smbiyosys/sbysrc/sby.py" "/Users/archie/yosys/yosys-abc") println)
-
-;; USEFUL COMMANDS
-;; get counter example (for equiv-failures) 
-;; simulate counter example (for equiv-failures) 
-
-(->> "bugs"
-     clojure.java.io/file
-     file-seq
-     (shuffle)
-     (take 50)
-     (map str)
-     (filter #(str/includes? % ".bug.log"))
-     (map slurp)
-     (map read-string)
-     (map :error)
-     (map :type)
-     (filter #(= % :synth-fail))
-     #_(filter #(->> % :error :type (= :synth-fail))))
-
-(->> "bugs"
-     clojure.java.io/file
-     file-seq
-     (shuffle)
-     (take 20)
-     (map str)
-     (filter #(str/includes? % ".bug.log"))
-     (map slurp)
-     (map read-string)
-     (filter #(->> % :error :type (= :synth-fail))))
-
-(->> "bugs"
-     clojure.java.io/file
-     file-seq
-     (shuffle)
-     (take 20)
-     (map str)
-     (filter #(str/includes? % ".bug.log"))
-     (map slurp)
-     (map read-string)
-     (filter #(->> % :error :type (= :synth-fail)))
-     count
-     println)
 
 (defn tryread [file]
   (try
@@ -94,41 +30,27 @@
         bugs (filter identity (map tryread bug-files))]
     bugs))
 
-(defn is-synth-fail [bug] (->> bug :error :type (= :synth-fail)))
-(defn is-equiv-fail [bug] (->> bug :error :type (= :equiv-fail)))
-(defn is-timeout [bug] (and (->> bug :error :type (= :synth-fail))
-                            (->> bug :error :result :exit (= 124))
-                            (->> bug :error :result :err empty?)))
+(defn is-synth-fail? [bug] (->> bug :error :type (= :synth-fail)))
+(defn is-equiv-fail? [bug] (->> bug :error :type (= :equiv-fail)))
+(defn is-timeout? [bug] (case (->> bug :error :type)
+                          :synth-fail (and (->> bug :error :result :exit (= 124))
+                                           (->> bug :error :result :err empty?))
+                          :equiv-fail (and (->> bug :error :proof :exit (= 124))
+                                           (->> bug :error :proof :err empty?))
+                          nil))
+(defn is-proof-err? [bug] (and (->> bug :error :type (= :equiv-fail))
+                               (->> bug :error :proof :exit (= 16))))
+
+(defn asan-err? [bug] (case (bug :type)
+                          :equiv-fail (->> bug :error :proof :out (re-find #"AddressSanitizer"))
+                          :synth-fail (->> bug :error :result :out (re-find #"AddressSanitizer"))
+                          nil))
 (defn classify-bugs [bugs]
-  {:synth-fail (filter #(->> % :error :type (= :synth-fail)) bugs)
-   :equiv-fail (filter #(->> % :error :type (= :equiv-fail)) bugs)})
-
-(defn -main []
-  (let [grouped-bugs (classify-bugs (read-bugs "bugs"))]
-    (println (format "%s Synthesis bugs" (->> grouped-bugs :synth-fail count)))
-    (println (format "%s Equivalence bugs" (->> grouped-bugs :equiv-fail count)))))
-
-(->> "bugs" read-bugs classify-bugs :synth-fail (filter #(->> % :error :result :err (not= ""))))
-
-#_(->> "bugs"
-       clojure.java.io/file
-       file-seq
-       (filter #(str/includes? % ".bug.log"))
-       (map str)
-       (map slurp)
-       (map read-string)
-       (filter #(->> % :type (= :synth-error))))
-
-#_(defn simulate [syb-path yosys-path abc-path smtbmc-path python-path g tmpfile pre-synth-path post-synth-path]
-    (let [top-path (format "%s/top.v" tmpfile)]
-      (spit top-path (top g))
-      (let [proof-result (run-sby syb-path yosys-path abc-path python-path tmpfile top-path pre-synth-path post-synth-path smtbmc-path)]
-        (sh (format "iverilog -g2012 %s %s %s %s -o sim"
-                    top-path
-                    pre-synth-path
-                    post-synth-path
-                    counter-eg-tb-path))
-        (sh "bash" "-c" "vvp sim"))))
+  {:synth-fail (filter is-synth-fail? bugs)
+   :equiv-fail (filter is-equiv-fail? bugs)
+   :timeouts (filter is-timeout? bugs)
+   :proof-err (filter is-proof-err? bugs)
+   :asan-err (filter asan-err? bugs)})
 
 (defn simulate-bug [config bug]
   (let [sim-dir (->> (format "bugs/%X_sim" (->> bug :input hash))
@@ -142,26 +64,38 @@
     (spit pre-path (->> bug :error :pre-synth-verilog))
     (let [sim-result (simulate (assoc config :id (->> bug :input hash (format "%X"))) (->> bug :input eval) "." pre-path post-path)]
       #_(if sim-result
-        (do
-         (spit (format "%s/log.out.txt" sim-dir) (sim-result :out))
-         (spit (format "%s/log.err.txt" sim-dir) (sim-result :err))
-         (spit (format "%s/exit.txt" sim-dir) (sim-result :exit))))
+          (do
+            (spit (format "%s/log.out.txt" sim-dir) (sim-result :out))
+            (spit (format "%s/log.err.txt" sim-dir) (sim-result :err))
+            (spit (format "%s/exit.txt" sim-dir) (sim-result :exit))))
       sim-result)))
 
-(defn -main []
-  (let [grouped-bugs (classify-bugs (read-bugs "bugs"))]
-    (println (format "%s Synthesis bugs" (->> grouped-bugs :synth-fail count)))
-    (println (format "%s Equivalence bugs" (->> grouped-bugs :equiv-fail count))))
-  (let [simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"}
-                                 (->> "config.clj" slurp read-string))]
-    (->> "bugs"
-         read-bugs
-         classify-bugs
-         :equiv-fail
-         (mapv (fn [bug]
-                 [bug
-                  (simulate-bug simulation-config bug)]))
-         (filter (fn [[bug result]] (->> result :out empty? not)))
-         (mapv (fn [[bug result]] (->> bug :input hash)))
-         println)))
+(def bugs (read-bugs "bugs"))
 
+(defn index-bugs [bugs] (->> bugs
+                             (mapv (fn [sim-bug] {(->> sim-bug :input hash (format "%X")) sim-bug}))
+                             (apply merge)))
+
+(def hashed-bugs (index-bugs bugs))
+
+(let [grouped-bugs (classify-bugs bugs)]
+  (println (format "%s Bug Reports" (->> bugs count)))
+  (println (format "%s Synthesis Bugs" (->> grouped-bugs :synth-fail count)))
+  (println (format "%s Equivalence Bugs" (->> grouped-bugs :equiv-fail count)))
+  (println (format "%s Timeouts" (->> grouped-bugs :timeouts count)))
+  (println (format "%s Proof Errors" (->> grouped-bugs :proof-err count)))
+  (println (format "%s ASan Errors" (->> grouped-bugs :asan-err count))))
+
+(def simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"}
+                              (->> "config.clj" slurp read-string)))
+
+(defn verisim [bugs] (->> bugs
+                          classify-bugs
+                          :equiv-fail
+                          #_(take 100)
+                          (mapv (fn [bug]
+                                  (merge bug
+                                         (try (simulate-bug simulation-config bug)
+                                              (catch Exception e (println "error during simulation: " e))))))
+                          #_(filter (fn [[bug result]] (->> result :out empty? not)))
+                          index-bugs))
