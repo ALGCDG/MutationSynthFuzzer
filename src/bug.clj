@@ -41,7 +41,7 @@
 (defn is-proof-err? [bug] (and (->> bug :error :type (= :equiv-fail))
                                (->> bug :error :proof :exit (= 16))))
 
-(defn asan-err? [bug] (case (bug :type)
+(defn asan-err? [bug] (case (->> bug :error :type)
                           :equiv-fail (->> bug :error :proof :out (re-find #"AddressSanitizer"))
                           :synth-fail (->> bug :error :result :out (re-find #"AddressSanitizer"))
                           nil))
