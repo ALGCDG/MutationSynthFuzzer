@@ -42,9 +42,9 @@
                                (->> bug :error :proof :exit (= 16))))
 
 (defn asan-err? [bug] (case (->> bug :error :type)
-                          :equiv-fail (->> bug :error :proof :out (re-find #"AddressSanitizer"))
-                          :synth-fail (->> bug :error :result :out (re-find #"AddressSanitizer"))
-                          nil))
+                        :equiv-fail (->> bug :error :proof :out (re-find #"AddressSanitizer"))
+                        :synth-fail (->> bug :error :result :out (re-find #"AddressSanitizer"))
+                        nil))
 (defn classify-bugs [bugs]
   {:synth-fail (filter is-synth-fail? bugs)
    :equiv-fail (filter is-equiv-fail? bugs)
@@ -88,6 +88,14 @@
 
 (def simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"}
                               (->> "config.clj" slurp read-string)))
+
+(defn tree-depth [count root]
+  (if (->> root (filter list?) empty? not)
+    (->> root
+         (filter list?)
+         (map (partial tree-depth (+ 1 count)))
+         (apply max))
+    (+ 1 count)))
 
 (defn verisim [bugs] (->> bugs
                           classify-bugs
