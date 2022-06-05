@@ -1,6 +1,7 @@
 (ns graph
+  (:require [clojure.set :as set])
+  (:require [util :refer [enumerate]])
   (:require [clojure.string :as str]))
-
 (defn graph [tree]
   (if (or (symbol? tree)
           (< (count tree) 3))
@@ -85,3 +86,44 @@
 (println (dott '(f 1 (g 2 (h 3 (i 4 (j 5 x)) y)))))
 
 (->> (slurp "example_tree.clj") read-string dott println)
+
+
+(defn genetic-graph [[nodes edges]]
+  (format "digraph G {\nrankdir=LR\n%s\n%s\n%s\n%s}"
+  (str/join "\n"
+            (for [[index node] (enumerate nodes)]
+              (format "t%s [label=\"%s\", style=\"rounded\", shape=\"record\"]"
+                      index
+                      (case (node :type)
+                        :names (format ":names\\ninputs: %d" (node :num-inputs))
+                        :constant (format ":constant\\nvalue: %s" (node :value))
+                        (node :type)))))
+    
+  (str/join "\n"
+  (for [edge edges]
+    (let [src-index (->> edge set/map-invert :output)]
+      (str/join "\n"
+                (filter identity (for [[index port] edge]
+      (if (not= port :output)
+        (format "t%s -> t%s" src-index index))))))))
+  (->> nodes
+       enumerate
+       (filter (fn [[index node]] (= (node :type) :output)))
+       (map (fn [[index node]] (format "t%s" index)))
+       ((partial str/join "; "))
+       (format "{rank=same; %s}"))
+  (->> nodes
+       enumerate
+       (filter (fn [[index node]] (= (node :type) :input)))
+       (map (fn [[index node]] (format "t%s" index)))
+       ((partial str/join "; "))
+       (format "{rank=same; %s}"))))
+
+(use 'genetic.representation)
+
+(genetic-graph (genetic-representation "example.blif.old"))
+
+(println (genetic-graph (genetic-representation "example.blif.old")))
+
+#_(println (genetic-graph (genetic.mutation/change-names-remove-clause 555488046 (genetic.mutation/change-names-flip-term 26282645 (genetic.representation/genetic-representation "examples/57913.FED53366.blif")))))
+
