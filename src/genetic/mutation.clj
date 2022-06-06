@@ -12,7 +12,7 @@
 (defn change-latch-trigger [seed [nodes edges]]
   (let [[node-seed trigger-seed] (generate-seeds seed 2)]
     (let [[modified-index node] (rand-nodetype node-seed nodes :latch)]
-      (let [other-triggers (set/difference #{:re, :fe, :as, :ah, :al} #{(get node :trigger-type)})]
+      (let [other-triggers (set/difference #{"re", "fe", "as", "ah", "al"} #{(get node :trigger-type)})]
         (let [new-node (assoc node :trigger-type (pure-rand-nth trigger-seed (into [] other-triggers)))]
           [(assoc (into [] nodes) modified-index new-node) edges])))))
 
@@ -55,10 +55,10 @@
 (defn change-names-add-clause [seed [nodes edges]]
   (let [[node-seed sample-seed] (generate-seeds seed 2)]
     (let [[modified-index node] (rand-nodetype node-seed nodes :names)]
-      (let [original-table (get node :table)]
+      (let [original-table (node :table)]
         (let [n (+ 1 (get node :num-inputs))]
-          (let [new-clause (take n (pure-sample sample-seed 0.1 (cycle (CNF-SYMBOLS))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
-            (let [new-table (conj original-table [new-clause])]
+          (let [new-clause (into [] (take n (pure-sample sample-seed 0.1 (cycle (CNF-SYMBOLS)))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
+            (let [new-table (conj original-table new-clause)]
               (let [new-node (assoc node :table new-table)]
                 [(assoc (into [] nodes) modified-index new-node) edges]))))))))
 
@@ -239,7 +239,7 @@
                                                                       (not= port :output))
                                                                     target-edge))]
     [(conj nodes {:type :latch
-                  :trigger (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al" "as"})
+                  :trigger-type (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al" "as"})
                   :initial (->> (range 4) (pure-rand-nth initial-seed) str)})
      (conj (assoc (into [] edges)
                   clk-index
@@ -276,7 +276,9 @@
                                 (pure-sample symbol-seed 0.1)
                                 (take (* num-clause (+ 1 num-inputs)))
                                 (partition (+ 1 num-inputs))))})
-     (conj (apply (partial assoc (into [] edges)) (flatten new-sinks))
+     (conj (assoc (apply (partial assoc (into [] edges)) (flatten new-sinks))
+                  target-index
+                  (dissoc target-edge stolen-sink-index))
            {(count nodes) :output stolen-sink-index stolen-sink-port})]))
 
 (defn remove-node [seed [nodes edges]]
@@ -305,9 +307,9 @@
                                     `change-names-add-clause
                                     `change-constant-value
                                     `change-latch-initial
-                                    `change-names-remove-clause
-                                    `change-names-add-clause
                                     `change-names-flip-term
+                                    `change-names-add-input
+                                    `change-names-remove-input
                                     `add-output
                                     `add-input
                                     `add-constant
