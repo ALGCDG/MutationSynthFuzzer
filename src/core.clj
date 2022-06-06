@@ -1,4 +1,5 @@
 (ns core
+  (:gen-class)
   (:require [blif.compose :refer [generate-blif]])
   (:require [blif.verilog :refer [genetic-to-verilog]])
   (:require [genetic.representation :refer [genetic-representation]])
