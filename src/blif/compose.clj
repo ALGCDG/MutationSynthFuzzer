@@ -1,6 +1,6 @@
 (ns blif.compose
   (:require [clojure.string :as str])
-  (:require [util :refer [input-keyword]]))
+  (:require [util :refer [input-keyword log]]))
 
 (defmacro MISSING-EDGE [] "missing_edge")
 
@@ -9,11 +9,12 @@
 (defn edge-to-var [edge]
   {:pre (< (count edge) 3)
    :post (string? %)}
+  (if (edge :missing) (MISSING-EDGE)
   (format "wire%s" (-> (keys edge)
-                    (or ,,, (MISSING-EDGE))
+                    #_(or ,,, (MISSING-EDGE))
                     pr-str
                     (str/replace ,,, #"\s" "_")
-                    (str/replace ,,, #"\(|\)" ""))))
+                    (str/replace ,,, #"\(|\)" "")))))
 
 (defn create-var [index port edges]
   (let [check
@@ -24,7 +25,8 @@
     (let [edge (filter check edges)]
       (if (first edge)
         (edge-to-var (first edge))
-        (MISSING-EDGE)))))
+        (do (log (format "Failed to create variable for index %d and port %s" index port))
+            (MISSING-EDGE))))))
 
 (defn generate-input [node index edges]
   (format ".inputs %s" (create-var index :output edges)))
@@ -41,17 +43,19 @@
     (format ".latch %s %s %s %s %s" input output trigger clk initial)))
 
 (defn generate-constant [node index edges]
-  (let [table (if (= :true (get node :value)) "\n 1" "")]
+  (let [table (if (= :true (get node :value)) "\n1" "")]
     (format ".names %s %s" (create-var index :output edges) table)))
 
 (defn generate-names [node index edges]
   (let [input-labels (map input-keyword (range (get node :num-inputs)))]
     (let [args (map #(create-var index % edges) input-labels)]
       (let [output (create-var index :output edges)]
-        (format ".names %s %s \n %s"
+        (format ".names %s %s \n%s"
                 (str/join " " args)
                 (create-var index :output edges)
-                (str/join "\n" (map (partial str/join " ") (get node :table))))))))
+                (str/join "\n" (map #(format "%s %s"
+                                             (str/join "" (butlast %))
+                                             (last %)) (get node :table))))))))
 
 (defn generate [node index edges]
   (case (get node :type)
