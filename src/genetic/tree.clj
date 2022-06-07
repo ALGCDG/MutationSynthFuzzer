@@ -1,7 +1,7 @@
 (ns genetic.tree
   (:use genetic.mutation)
   (:require [genetic.representation :refer [genetic-representation]])
-  (:require [genetic.crossover :refer [dumb-crossover]]))
+  (:require [genetic.crossover :refer [dumb-crossover lossless-crossover compatible-crossover check-compatible]]))
 
 ;; Represent generated tests as S expression of mutations and crossovers of original corpus.
 ;; Allows us to create family tree of tests
@@ -10,7 +10,12 @@
 
 (defn add-mutation [g] `(~(random-mutation) ~(rand-int Integer/MAX_VALUE) ~g))
 
-(defn add-crossover [[a b]] `(dumb-crossover ~(rand-int Integer/MAX_VALUE) ~a ~b))
+(defn add-crossover [[a b]] (if (check-compatible (eval a) (eval b))
+                              `(compatible-crossover ~(rand-int Integer/MAX_VALUE) ~a ~b)
+                              `(~(rand-nth [`dumb-crossover
+                                            `lossless-crossover])
+                                ~(rand-int Integer/MAX_VALUE) ~a ~b)))
+
 
 (def tree-eval (memoize eval))  ;; recognise already evaluated branches
 
@@ -22,7 +27,7 @@
 
 (add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")])
 
-(eval (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
+(add-crossover ['(genetic-representation "example.blif.old") (add-mutation '(genetic-representation "example.blif.old"))])
 
 (println (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
 
