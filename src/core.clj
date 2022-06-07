@@ -37,8 +37,10 @@
       [coverage g])
     (catch Exception e
       (case (:type (ex-data e))
-        :synth-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
-        :equiv-fail (spit (format "bugs/%X.bug.log" (hash g)) {:input g :error (ex-data e)})
+        :synth-fail (do (log "Potential Synth Bug!")
+                        (spit (format "%s/%X.bug.log" (or (config :bug-dir) "bugs") (hash g)) {:input g :error (ex-data e)}))
+        :equiv-fail (do (log "Potential Equiv Bug!")
+                        (spit (format "%s/%X.bug.log" (or (config :bug-dir) "bugs") (hash g)) {:input g :error (ex-data e)}))
         :convert-fail (log (format "Failed to convert %s to verilog" g))
         (log (format "Test Failed: %s, %s" g e))))
     (finally (sh "rm" "-rf" "*" :dir tmpfile))))
