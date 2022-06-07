@@ -67,6 +67,8 @@
     (throw "Unrecognised Node Type encountered during BLIF generation.")))
 
 (defn generate-blif [[nodes edges]]
+  (if (not (empty? (filter #(->> % vals (filter (partial = :output)) count (= 1) not) edges)))
+    (throw (ex-info "Edge does not have single output port" {:type :invalid-state})))
   (format ".model %s\n%s\n.names %s\n.end"
           (GENERATED-MODULE-NAME)
           (str/join "\n" (map-indexed (fn [index node] (generate node index edges)) nodes))
