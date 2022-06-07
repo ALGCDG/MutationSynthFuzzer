@@ -3,7 +3,8 @@
   (:require [util :refer [enumerate input-keyword]])
   (:require [pure-random :refer [pure-rand-nth pure-sample generate-seeds]]))
 
-(defmacro CNF-SYMBOLS [] ["0" "1" "-"])
+(defmacro INPUT-SYMBOLS [] ["0" "1" "-"])
+(defmacro OUTPUT-SYMBOLS [] ["0" "1"])
 
 (defn find-nodes-indexed [nodes type]
   (filterv (fn [[index node]] (= (get node :type) type)) (enumerate nodes)))
@@ -40,7 +41,10 @@
                          target-row-index
                          (assoc target-row
                                 target-symbol-index
-                                (pure-rand-nth char-seed (set/difference (set (CNF-SYMBOLS)) #{target-symbol}))))
+                                (pure-rand-nth char-seed (set/difference (set (if (= target-symbol-index (node :num-inputs))
+                                                                                (OUTPUT-SYMBOLS)
+                                                                                (INPUT-SYMBOLS)))
+                                                                         #{target-symbol}))))
         new-node (assoc node :table new-table)]
     [(assoc (into [] nodes) modified-index new-node) edges]))
 
@@ -53,11 +57,14 @@
           [(assoc (into [] nodes) modified-index new-node) edges])))))
 
 (defn change-names-add-clause [seed [nodes edges]]
-  (let [[node-seed sample-seed] (generate-seeds seed 2)]
+  (let [[node-seed sample-seed output-seed] (generate-seeds seed 3)]
     (let [[modified-index node] (rand-nodetype node-seed nodes :names)]
       (let [original-table (node :table)]
         (let [n (+ 1 (get node :num-inputs))]
-          (let [new-clause (into [] (take n (pure-sample sample-seed 0.1 (cycle (CNF-SYMBOLS)))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
+          (let [new-clause (into [] (conj (into []
+                                                (take (node :num-inputs)
+                                                (pure-sample sample-seed 0.1 (cycle (INPUT-SYMBOLS)))))
+                                          (pure-rand-nth output-seed (OUTPUT-SYMBOLS))))]  ;; Note that the probability 0.1 is arbitrary, we are performing a uniform sample (just need to make sure probability is not 1).
             (let [new-table (conj original-table new-clause)]
               (let [new-node (assoc node :table new-table)]
                 [(assoc (into [] nodes) modified-index new-node) edges]))))))))
@@ -97,8 +104,8 @@
                    :num-inputs (->> target-node :num-inputs (+ 1))
                    :table (->> target-node
                                :table
-                               (mapv vector (pure-sample symbol-seed 0.1 (cycle (CNF-SYMBOLS))))
-                               (mapv #(conj (second %) (first %))))))
+                               (mapv vector (pure-sample symbol-seed 0.1 (cycle (INPUT-SYMBOLS))))
+                               (mapv #(conj (->> % second butlast (into [])) (first %) (->> % second last))))))
      (let [[edge-index target-edge] (pure-rand-nth edge-seed (->> edges
                                                                   enumerate
                                                                   (filter #(->> % second set/map-invert :output))))]
@@ -108,7 +115,7 @@
 
 ;; add output can use an existing output, or create a new input
 (defn add-output [seed [nodes edges]]
-  [(conj nodes {:type :output})
+  [(conj (into [] nodes) {:type :output})
    (let [[target-index target-edge] (pure-rand-nth seed
                                                    (->> edges
                                                         enumerate
@@ -156,13 +163,13 @@
                                                             (filter (fn [[index port]]
                                                                       (not= port :output))
                                                                     edge))]
-    [(conj nodes {:type :input})
+    [(conj (into [] nodes) {:type :input})
      (if (and index (integer? index))
        (conj (assoc (into [] edges)
                     index
                     (dissoc edge stolen-sink-index))
              {(count nodes) :output stolen-sink-index stolen-sink-port})
-       (conj edges {(count nodes) :output}))]))
+       (conj (into [] edges) {(count nodes) :output}))]))
 
 (defn edge-steal-sink [seed [nodes edges]]
   (let [[target-seed theif-seed sink-seed] (generate-seeds seed 3)
@@ -214,13 +221,13 @@
                                                             (filter (fn [[index port]]
                                                                       (not= port :output))
                                                                     edge))]
-    [(conj nodes {:type :constant :value (pure-rand-nth value-seed [:true :false])})
+    [(conj (into [] nodes) {:type :constant :value (pure-rand-nth value-seed [:true :false])})
      (if (and index (integer? index))
        (conj (assoc (into [] edges)
                     index
                     (dissoc edge stolen-sink-index))
              {(count nodes) :output stolen-sink-index stolen-sink-port})
-       (conj edges {(count nodes) :output}))]))
+       (conj (into [] edges) {(count nodes) :output}))]))
 
 (defn add-latch [seed [nodes edges]]
   (let [[edge-seed sink-seed trigger-seed initial-seed clk-src-seed input-seed] (generate-seeds seed 6)
@@ -238,7 +245,7 @@
                                                             (filter (fn [[index port]]
                                                                       (not= port :output))
                                                                     target-edge))]
-    [(conj nodes {:type :latch
+    [(conj (into [] nodes) {:type :latch
                   :trigger-type (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al" "as"})
                   :initial (->> (range 4) (pure-rand-nth initial-seed) str)})
      (conj (assoc (into [] edges)
@@ -268,10 +275,10 @@
                                                             (filter (fn [[index port]]
                                                                       (not= port :output))
                                                                     target-edge))]
-    [(conj nodes {:type :names
+    [(conj (into [] nodes) {:type :names
                   :num-inputs num-inputs
                   :table (let [num-clause (pure-rand-nth clause-seed (range 1 1000))]
-                           (->> (CNF-SYMBOLS)
+                           (->> (OUTPUT-SYMBOLS)
                                 cycle
                                 (pure-sample symbol-seed 0.1)
                                 (take (* num-clause (+ 1 num-inputs)))
