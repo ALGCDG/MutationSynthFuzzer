@@ -20,7 +20,7 @@
 (defn change-latch-initial [seed [nodes edges]]
   (let [[node-seed initial-seed] (generate-seeds seed 2)]
     (let [[modified-index node] (rand-nodetype node-seed nodes :latch)]
-      (let [other-initial (set/difference (set (range 4)) #{(get node :initial)})]
+      (let [other-initial (set/difference (set (range 2)) #{(get node :initial)})]
         (let [new-node (assoc node :initial (pure-rand-nth initial-seed (into [] other-initial)))]
           [(assoc (into [] nodes) modified-index new-node) edges])))))
 
@@ -247,7 +247,7 @@
                                                                     target-edge))]
     [(conj (into [] nodes) {:type :latch
                   :trigger-type (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al" "as"})
-                  :initial (->> (range 4) (pure-rand-nth initial-seed) str)})
+                  :initial (->> (range 2) (pure-rand-nth initial-seed) str)})
      (conj (assoc (into [] edges)
                   clk-index
                   (assoc clk-edge (count nodes) :clk)
