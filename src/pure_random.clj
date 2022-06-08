@@ -21,11 +21,11 @@
 
 ;;(mod (count '(1 2 3 4 5 6 7 8)) 0)
 ;;
-(pure-rand-nth 0 [1 2 3 4 5 6 7 8])
-
-(pure-sample 0 0.5 [1 2 3 4 5 6 7 8])
-
-(take 10 (pure-sample 0 0.5 (range)))
+;;(pure-rand-nth 0 [1 2 3 4 5 6 7 8])
+;;
+;;(pure-sample 0 0.5 [1 2 3 4 5 6 7 8])
+;;
+;;(take 10 (pure-sample 0 0.5 (range)))
 
 (defn generate-seeds [seed n]
   (->> seed

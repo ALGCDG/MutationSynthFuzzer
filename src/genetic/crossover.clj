@@ -69,12 +69,12 @@
      (->> (map vector edge-seeds edge-pairs)
           (map (fn [[seed [a b]]] (if (= 0 (mod seed 2)) a b))))]))
 
-(use 'genetic.representation)
-
-;; compatible-crossover of the same individual should return that individual
-(assert (= (genetic-representation "example.blif.old")
-           (compatible-crossover 0 (genetic-representation "example.blif.old")
-                                 (genetic-representation "example.blif.old"))))
+;;(use 'genetic.representation)
+;;
+;;;; compatible-crossover of the same individual should return that individual
+;;(assert (= (genetic-representation "example.blif.old")
+;;           (compatible-crossover 0 (genetic-representation "example.blif.old")
+;;                                 (genetic-representation "example.blif.old"))))
 
 (defn check-same-ports [[a b]]
   (and (= (a :type) (b :type))
@@ -85,6 +85,6 @@
 (defn check-compatible [[a-nodes a-edges] [b-nodes b-edges]]
   (every? check-same-ports (map vector a-nodes b-nodes)))
 
-(check-compatible (genetic-representation "example.blif.old") (genetic-representation "example.blif.old"))
+;;(check-compatible (genetic-representation "example.blif.old") (genetic-representation "example.blif.old"))
 
 (defn crossover [[a b]] (dumb-crossover a b))

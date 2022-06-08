@@ -19,21 +19,21 @@
 
 (def tree-eval (memoize eval))  ;; recognise already evaluated branches
 
-(add-mutation '(genetic-representation "example.blif.old"))
-
-(println (add-mutation `(genetic-representation "example.blif.old")))
-
-(eval (add-mutation '(genetic-representation "example.blif.old")))
-
-(add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")])
-
-(add-crossover ['(genetic-representation "example.blif.old") (add-mutation '(genetic-representation "example.blif.old"))])
-
-(println (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
-
-(tree-eval (add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")]))
-
-(-> (iterate add-mutation '(genetic-representation "example.blif.old")) (nth 5))
-
-(spit "state.clj" (-> (iterate add-mutation '(genetic-representation "example.blif.old")) (nth 5)))
-;; Write genetic state to file
+;;(add-mutation '(genetic-representation "example.blif.old"))
+;;
+;;(println (add-mutation `(genetic-representation "example.blif.old")))
+;;
+;;(eval (add-mutation '(genetic-representation "example.blif.old")))
+;;
+;;(add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")])
+;;
+;;(add-crossover ['(genetic-representation "example.blif.old") (add-mutation '(genetic-representation "example.blif.old"))])
+;;
+;;(println (add-crossover [`(genetic-representation "example.blif.old") `(genetic-representation ~"example.blif.old")]))
+;;
+;;(tree-eval (add-crossover ['(genetic-representation "example.blif.old") '(genetic-representation "example.blif.old")]))
+;;
+;;(-> (iterate add-mutation '(genetic-representation "example.blif.old")) (nth 5))
+;;
+;;(spit "state.clj" (-> (iterate add-mutation '(genetic-representation "example.blif.old")) (nth 5)))
+;;;; Write genetic state to file
