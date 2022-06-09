@@ -18,6 +18,28 @@
                                  "opt_reduce"
                                  "fsm_opt"
                                  "onehot"])
+(def quartus-sdc "create_clock -period 5 -name clk [get_ports clock]")
+
+(defn quartus-config [module-name file-path sdc-path]
+  (str/join "\n"
+            ["load_package flow"
+             ""
+             (format "project_new -overwrite %s" module-name)
+             ""
+             "set_global_assignment -name FAMILY \"Cyclone 10 GX\""
+             (format "set_global_assignment -name SYSTEMVERILOG_FILE %s" file-path)
+             (format "set_global_assignment -name TOP_LEVEL_ENTITY %s" module-name)
+             (format "set_global_assignment -name SDC_FILE %s" sdc-path)
+             "set_global_assignment -name INI_VARS \"qatm_force_vqm=on;\""
+             "set_global_assignment -name NUM_PARALLEL_PROCESSORS 2"
+             "set_instance_assignment -name VIRTUAL_PIN ON -to *"
+             ""
+             "execute_module -tool syn"
+             "execute_module -tool eda -args \"--simulation --tool=vcs\""
+             ""
+             "project_close"]))
+
+(println (quartus-config "top" "/home/vagrant/example.v" "/home/vagrant/example.sdc"))
 
 (defn synth-command [synth synth-path input-verilog-file output-verilog-file]
   (case synth
@@ -28,6 +50,10 @@
                    (GENERATED-MODULE-NAME)
                    (SYNTHED-MODULE-NAME)
                    output-verilog-file)
+    :quartus (do
+               (spit ".sdc" quartus-sdc)
+               (spit ".tcl" quartus-config "pre" )
+               (format "%s -t %s" synth-path ))
     (throw (Exception. (format "Incompatable synthesizer %s" synth)))))
 
 (defn run-synthesis [synth synth-path timeout input-verilog-file output-verilog-file]
