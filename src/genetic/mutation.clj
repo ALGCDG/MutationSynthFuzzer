@@ -13,7 +13,7 @@
 (defn change-latch-trigger [seed [nodes edges]]
   (let [[node-seed trigger-seed] (generate-seeds seed 2)]
     (let [[modified-index node] (rand-nodetype node-seed nodes :latch)]
-      (let [other-triggers (set/difference #{"re", "fe", "as", "ah", "al"} #{(get node :trigger-type)})]
+      (let [other-triggers (set/difference #{"re", "fe", "ah", "al"} #{(get node :trigger-type)})]
         (let [new-node (assoc node :trigger-type (pure-rand-nth trigger-seed (into [] other-triggers)))]
           [(assoc (into [] nodes) modified-index new-node) edges])))))
 
@@ -246,7 +246,7 @@
                                                                       (not= port :output))
                                                                     target-edge))]
     [(conj (into [] nodes) {:type :latch
-                  :trigger-type (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al" "as"})
+                  :trigger-type (pure-rand-nth trigger-seed #{"re" "fe" "ah" "al"})
                   :initial (->> (range 2) (pure-rand-nth initial-seed) str)})
      (conj (assoc (into [] edges)
                   clk-index
