@@ -29,6 +29,24 @@
 (defn find-output-indices [nodes]
   (mapv first (filter (fn [[index node]] (not= (get node :type) :output)) (enumerate nodes))))
 
+(defn common-output [a b]
+  (= (->> a set/map-invert :output)
+     (->> b set/map-invert :output)))
+
+(defn combine-edges [edges]
+  (loop [in-buffer edges
+         out-buffer []]
+    (if (->> in-buffer empty? not)
+      (recur
+       (filter #(not (common-output (first in-buffer) %)) (rest in-buffer))
+       (->> in-buffer
+            (filter (partial common-output (first in-buffer)))
+            (apply merge)
+            (conj out-buffer)))
+      out-buffer)))
+
+(combine-edges [{1 :output 2 :input} {1 :output 10 :clk} {1 :output 2 :clk}])
+
 (defn dumb-crossover [seed [a-nodes a-edges] [b-nodes b-edges]]
   (let [[nodes-seed edges-seed fix-seed] (generate-seeds seed 3)
         b-offset-edges (update-edges (count a-nodes) b-edges)
@@ -42,7 +60,7 @@
                        (apply (partial merge {}))
                        set/map-invert)
         edge-fixer (partial fix-edge fix-seed index-map (find-output-indices sampled-nodes))]
-    [sampled-nodes (mapv edge-fixer sampled-edges)]))
+    [sampled-nodes (combine-edges (mapv edge-fixer sampled-edges))]))
 
 (defn lossless-crossover [_ [a-nodes a-edges] [b-nodes b-edges]]
   (let [b-offset-edges (update-edges (count a-nodes) b-edges)
