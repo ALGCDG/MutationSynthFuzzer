@@ -17,7 +17,7 @@
 (defn test-genetic [config g tmpfile]
   (log (format "Testing %s" g))
   (try
-    (let [input-verilog-path (->> g eval (genetic-to-verilog (config :yosys-path) tmpfile))
+    (let [input-verilog-path (->> g eval (genetic-to-verilog config tmpfile))
           output-verilog-file (str/replace input-verilog-path #"\.v$" ".post.v")
           [coverage synth-result] (measure-coverage config
                                                     tmpfile
@@ -112,13 +112,13 @@
         [synth synth-path yosys-path corpus-dir sby-path abc-path src-dir] (map config [:synth :synth-path :yosys-path :corpus-dir :sby-path :abc-path :src-dir])]
   ;; Check provided arguments are valid
   ;; synth is a known synthesizer
-    (assert (#{:yosys} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
+    (assert (#{:yosys :evil} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
   ;; synth-path is a valid filepath to a executable
     (log (format "Checking Synth Under Test path: %s ..." synth-path))
     (check-file-exists synth-path
                        (format "Path to Synth Under Test (%s) is not a valid filepath!" synth-path))
-    (check-file-executable synth-path
-                           (format "Path to Synth Under Test (%s) is not an executable!" synth-path))
+    (if (not= synth :evil) (check-file-executable synth-path
+                           (format "Path to Synth Under Test (%s) is not an executable!" synth-path)))
   ;; TODO: Check instrumented and can collect coverage
   ;; yosys-path is a valid filepath to a executable (maybe verify that it really is yosys and that it is correctly insturmented)
     (log (format "Checking Yosys path: %s ..." synth-path))

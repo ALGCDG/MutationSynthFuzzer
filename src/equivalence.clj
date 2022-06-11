@@ -1,7 +1,7 @@
 (ns equivalence
   (:require [clojure.string :as str])
   (:require [clojure.java.shell :refer [sh]])
-  (:require [blif.compose :refer [create-var GENERATED-MODULE-NAME]])
+  (:require [blif.compose :refer [create-var GENERATED-MODULE-NAME MODULE-CLK]])
   (:require [synth :refer [SYNTHED-MODULE-NAME]])
   (:require [util :refer [log]])
   (:require [genetic.representation :refer [genetic-representation]]))
@@ -90,7 +90,7 @@
 
 (defmacro TOP-CLK [] "clk")
 
-(defn top [[nodes edges]]
+(defn top [config [nodes edges]]
   (let [indexed-nodes (map-indexed (fn [index node] (merge node {:index index})) nodes)
         sut-inputs (->> indexed-nodes
                         (filter #(= (:type %) :input))
@@ -111,10 +111,16 @@
             (str/join "\n" (map output (concat top-pre-outputs top-post-outputs)))
             (instance (GENERATED-MODULE-NAME) "pre"
                       (merge
+                       (if (config :force-clk)
+                         {(MODULE-CLK) (TOP-CLK)}
+                         {})
                        (zipmap sut-inputs top-inputs)
                        (zipmap sut-outputs top-pre-outputs)))
             (instance (SYNTHED-MODULE-NAME) "post"
                       (merge
+                       (if (config :force-clk)
+                         {(MODULE-CLK) (TOP-CLK)}
+                         {})
                        (zipmap sut-inputs top-inputs)
                        (zipmap sut-outputs top-post-outputs)))
             (always "posedge" (TOP-CLK)
@@ -122,22 +128,57 @@
                          (map assert-equivalent)
                          (str/join "\n"))))))
 
-;;(println (top (genetic-representation "example.blif.old")))
+(println (top {} (genetic-representation "example.blif.old")))
+
+(defn build-sim [& files]
+  (sh "bash" "-c" (format "iverilog -g2012 %s" (str/join " " files))))
+
+(defn run-sim []
+  (sh "bash" "-c" "vvp a.out"))
+
+(defn confirm-with-simrun [base-error sim-run-result]
+  (if (not (empty? (sim-run-result :out)))
+    (throw (ex-info "Equivalence Proof Failed, Simulation Agrees"
+                    (merge base-error
+                           {:sim-run sim-run-result})))
+    (log "Simulation failed to confirm proof failure.")))
+
+(defn confirm-with-simbuild [base-error & files]
+  (let [sim-compile-result (apply build-sim files)
+        elaborated-error (merge base-error {:sim-compile sim-compile-result})]
+    (if (= (sim-compile-result :exit) 0)
+      (confirm-with-simrun elaborated-error (run-sim))
+      (throw (ex-info "Equivalence Proof Failed, could not simulate counter example."
+                      elaborated-error)))))
+
+(defn confirm-bug [tmpfile base-error & files]
+  (if (re-find #"trace_tb.v" (-> base-error :proof :out))
+    (let [counter-eg-tb-path (format "%s/%s_%s/engine_0/trace_tb.v"
+                                     tmpfile
+                                     ""
+                                     (PROOF-NAME))]
+      (apply (partial confirm-with-simbuild base-error counter-eg-tb-path) files))
+    (throw (ex-info "Equivalence Proof Failed" base-error))))
 
 (defn check-equivalence [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
-    (spit top-path (top g))
-    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path nil)]
-      (sh "rm" top-path)
-      (if (not= (:exit proof-result) 0)
-        (if (and (= (:exit proof-result) 124)
-                 (empty? (:err proof-result)))
-          (log "Proof timed out")
-          (throw (ex-info "Equivalence Proof Failed" {:type :equiv-fail :pre-synth-verilog (slurp pre-synth-path) :post-synth-verilog (slurp post-synth-path) :proof proof-result})))))))
+    (spit top-path (top config g))
+    (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path true)]
+      (case (:exit proof-result)
+        0 (log "Succesfully Proved Equivalent")
+        124 (log "Equivalence Proof Timedout")
+        (confirm-bug tmpfile
+                     {:type :equiv-fail
+                      :pre-synth-verilog (slurp pre-synth-path)
+                      :post-synth-verilog (slurp post-synth-path)
+                      :proof proof-result}
+                     top-path
+                     pre-synth-path
+                     post-synth-path)))))
 
 (defn simulate [config g tmpfile pre-synth-path post-synth-path]
   (let [top-path (format "%s/top.v" tmpfile)]
-    (spit top-path (top g))
+    (spit top-path (top config g))
     (let [proof-result (run-sby config tmpfile top-path pre-synth-path post-synth-path true)]
       (if (re-find #"trace_tb.v" (proof-result :out))
         (let [counter-eg-tb-path (format "%s/%s_%s/engine_0/trace_tb.v" tmpfile (or (config :id) "") (PROOF-NAME))

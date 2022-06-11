@@ -24,5 +24,5 @@
         (throw (ex-info "BLIF conversion failure" {:type :convert-fail})))
       verilog-file)))
 
-(defn genetic-to-verilog [yosys-path dir g]
-  (blif-to-verilog yosys-path dir (format "%X" (hash g)) (generate-blif g)))
+(defn genetic-to-verilog [config dir g]
+  (blif-to-verilog (config :yosys-path) dir (format "%X" (hash g)) (generate-blif config g)))
