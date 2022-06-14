@@ -96,12 +96,14 @@
                         (filter #(= (:type %) :input))
                         (map :index)
                         (map #(create-var % :output edges))
-                        (map #(format "%s" %)))
+                        (map #(format "%s" %))
+                        distinct)
         sut-outputs (->> indexed-nodes
                          (filter #(= (:type %) :output))
                          (map :index)
                          (map #(create-var % :input edges))
-                         (map #(format "%s" %)))
+                         (map #(format "%s" %))
+                         distinct)
         top-inputs (take (count sut-inputs) (map #(format "x_%s" %) (range)))
         top-pre-outputs (distinct (map #(format "y_pre_%s" %) sut-outputs))
         top-post-outputs (distinct (map #(format "y_post_%s" %) sut-outputs))]
