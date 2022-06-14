@@ -128,7 +128,7 @@
                          (map assert-equivalent)
                          (str/join "\n"))))))
 
-(println (top {} (genetic-representation "example.blif.old")))
+;;(println (top {} (genetic-representation "example.blif.old")))
 
 (defn build-sim [& files]
   (sh "bash" "-c" (format "iverilog -g2012 %s" (str/join " " files))))
