@@ -86,7 +86,8 @@
   (println (format "%s Proof Errors" (->> grouped-bugs :proof-err count)))
   (println (format "%s ASan Errors" (->> grouped-bugs :asan-err count))))
 
-(def simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"}
+(def simulation-config (merge {:smtbmc-path "/Users/archie/yosys/yosys-smtbmc"
+                               :force-clk true}
                               (->> "config.clj" slurp read-string)))
 
 (defn tree-depth [count root]
