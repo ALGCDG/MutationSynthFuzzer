@@ -1,7 +1,8 @@
 (ns graph
   (:require [clojure.set :as set])
-  (:require [util :refer [enumerate]])
+  (:require [util :refer [enumerate input-keyword]])
   (:require [clojure.string :as str]))
+
 (defn graph [tree]
   (if (or (symbol? tree)
           (< (count tree) 3))
@@ -76,7 +77,7 @@
 ;;(dotn '(f 0 (g 0 (h 0 (i 0 (j 0 x)) y)))  "t" 0)
 
 (defn dott [tree]
-  (format "digraph G {\n%s\n%s\n}"
+  (format "digraph G {\nrankdir = BT\n%s\n%s\n}"
           (str/join "\n" (for [[node-id args] (dotn tree "t" 0)]
                            (format "%s [%s]"
                                    node-id
@@ -89,15 +90,27 @@
 
 
 (defn genetic-graph [[nodes edges]]
-  (format "digraph G {\nrankdir=LR\n%s\n%s\n%s\n%s}"
+  (format "digraph G {\nrankdir=LR\nsplines=line\n%s\n%s\n%s\n%s}"
   (str/join "\n"
             (for [[index node] (enumerate nodes)]
               (format "t%s [label=\"%s\", style=\"rounded\", shape=\"record\"]"
                       index
-                      (case (node :type)
-                        :names (format ":names\\ninputs: %d" (node :num-inputs))
-                        :constant (format ":constant\\nvalue: %s" (node :value))
-                        (node :type)))))
+                      (if node
+                        (case (node :type)
+                        :names (format "{{ %s }|{:names|%s}|<output> output}"
+                                       (->> (node :num-inputs)
+                                            range
+                                            (map input-keyword)
+                                            (map #(format "<%s> %s" (str/replace % #":" "") (str/replace % #":input" "")))
+                                            (str/join "|"))
+                                       (str/join "\\n" (map #(str/join "" %) (node :table))))
+                        :constant (format "{{:constant|%s}|<output> output}" (node :value))
+                        :input "{:input|<output> output}"
+                        :output "{<input> input|:output}"
+                        :latch (format "{{<clk> clk|<input> input}|{:latch|%s|%s}|<output> output}"
+                                       (node :trigger-type)
+                                       (node :initial))
+                        (node :type))))))
     
   (str/join "\n"
   (for [edge edges]
@@ -105,16 +118,20 @@
       (str/join "\n"
                 (filter identity (for [[index port] edge]
       (if (not= port :output)
-        (format "t%s -> t%s" src-index index))))))))
+        (format "t%s%s -> t%s%s"
+                src-index
+                (edge src-index)
+                index
+                (edge index)))))))))
   (->> nodes
        enumerate
-       (filter (fn [[index node]] (= (node :type) :output)))
+       (filter (fn [[index node]] (and node (= (node :type) :output))))
        (map (fn [[index node]] (format "t%s" index)))
        ((partial str/join "; "))
        (format "{rank=same; %s}"))
   (->> nodes
        enumerate
-       (filter (fn [[index node]] (= (node :type) :input)))
+       (filter (fn [[index node]] (and node (= (node :type) :input))))
        (map (fn [[index node]] (format "t%s" index)))
        ((partial str/join "; "))
        (format "{rank=same; %s}"))))
@@ -125,5 +142,5 @@
 
 (println (genetic-graph (genetic-representation "example.blif.old")))
 
-#_(println (genetic-graph (genetic.mutation/change-names-remove-clause 555488046 (genetic.mutation/change-names-flip-term 26282645 (genetic.representation/genetic-representation "examples/57913.FED53366.blif")))))
+(println (genetic-graph (genetic.mutation/change-names-flip-term 26282645 (genetic.representation/genetic-representation "examples/57913.FED53366.blif"))))
 
