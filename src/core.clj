@@ -41,7 +41,8 @@
                         (spit (format "%s/%X.bug.log" (or (config :bug-dir) "bugs") (hash g)) {:input g :error (ex-data e)}))
         :equiv-fail (do (log "Potential Equiv Bug!")
                         (spit (format "%s/%X.bug.log" (or (config :bug-dir) "bugs") (hash g)) {:input g :error (ex-data e)}))
-        :convert-fail (log (format "Failed to convert %s to verilog" g))
+        :convert-fail (do (log "Potential Convert Bug!")
+                        (spit (format "%s/%X.bug.log" (or (config :bug-dir) "bugs") (hash g)) {:input g :error (ex-data e)}))
         (log (format "Test Failed: %s, %s" g e))))
     (finally (sh "rm" "-rf" "*" :dir tmpfile))))
 
@@ -112,7 +113,7 @@
         [synth synth-path yosys-path corpus-dir sby-path abc-path src-dir] (map config [:synth :synth-path :yosys-path :corpus-dir :sby-path :abc-path :src-dir])]
   ;; Check provided arguments are valid
   ;; synth is a known synthesizer
-    (assert (#{:yosys :evil} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
+    (assert (#{:yosys :evil :abc} (keyword synth)) (format "Unrecognised synthesizer %s!" synth))
   ;; synth-path is a valid filepath to a executable
     (log (format "Checking Synth Under Test path: %s ..." synth-path))
     (check-file-exists synth-path

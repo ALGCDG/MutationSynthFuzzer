@@ -55,6 +55,8 @@
                (spit ".tcl" quartus-config "pre" )
                (format "%s -t %s" synth-path ))
     :evil (format "java -jar %s %s %s" synth-path input-verilog-file output-verilog-file)
+    :abc (format "%s -c \"read_verilog %s; collapse; dsd; fx; write_verilog %s\""
+                 synth-path input-verilog-file output-verilog-file)
     (throw (Exception. (format "Incompatable synthesizer %s" synth)))))
 
 (defn run-synthesis [synth synth-path timeout input-verilog-file output-verilog-file]
